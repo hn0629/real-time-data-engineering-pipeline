@@ -4,9 +4,9 @@
   <img src="images/dashboard-screenshot.png" alt="Dashboard Screenshot" width="900">
 </p>
 
-A real-time data engineering project that ingests JSON event data through Kafka, processes it with Spark Structured Streaming, stores raw and aggregated outputs in Cassandra, and visualizes the results in a Streamlit dashboard.
+A real-time data engineering project that ingests JSON event data through Kafka, processes it with Spark Structured Streaming, stores raw and aggregated outputs in Cassandra, exports curated results to BigQuery, and visualizes the outputs in dashboard-style reporting views.
 
-This project was built as a portfolio-style demo to show end-to-end streaming, validation, debugging, and operational thinking.
+This project was built as a portfolio-style demo to show end-to-end streaming, validation, debugging, cloud export, and operational thinking.
 
 ---
 
@@ -15,7 +15,8 @@ This project was built as a portfolio-style demo to show end-to-end streaming, v
 - Kafka-based ingestion of streaming JSON events
 - Spark jobs for raw event persistence and source-level aggregation
 - Cassandra storage for `events` and `source_metrics`
-- Streamlit dashboard for KPIs, charts, and validation checks
+- Export scripts for BigQuery reporting tables
+- Dashboard and reporting screenshots for validation and presentation
 - Pytest coverage for configuration, validation, and dashboard loading logic
 - Docker Compose setup for a reproducible local environment
 
@@ -32,13 +33,17 @@ flowchart LR
     D -->|write aggregated metrics| F[Cassandra Table<br/>source_metrics]
     E -->|query raw events| G[Streamlit Dashboard]
     F -->|query KPIs & metrics| G
+    E -->|export events| H[BigQuery<br/>events]
+    F -->|export metrics| I[BigQuery<br/>source_metrics]
+    H --> J[Reporting Layer]
+    I --> J
 ```
 
 ---
 
 ## Project Goal
 
-The goal of this project is to demonstrate a practical real-time streaming pipeline using tools commonly used in modern data engineering workflows. It also shows reproducibility, validation, and debugging skills.
+The goal of this project is to demonstrate a practical real-time streaming pipeline using tools commonly used in modern data engineering workflows. It also shows reproducibility, validation, debugging, and reporting readiness.
 
 The system answers a simple near-real-time analytics question: what events are arriving, which traffic sources produced them, and how much revenue is associated with each source?
 
@@ -52,8 +57,10 @@ The system answers a simple near-real-time analytics question: what events are a
 | Stream processing | Spark Structured Streaming | Reads Kafka data, validates it, and computes aggregates |
 | Database | Apache Cassandra | Stores raw events and source-level metrics |
 | Dashboard | Streamlit | Displays KPIs, charts, and raw event tables |
+| Cloud analytics | BigQuery | Stores exported event and metrics tables for reporting |
+| Reporting | Looker Studio | Visualizes curated analytics outputs |
 | Containerization | Docker Compose | Runs the local multi-service environment |
-| Language | Python | Implements Spark jobs, validation, and dashboard logic |
+| Language | Python | Implements Spark jobs, validation, dashboard logic, and exports |
 
 ---
 
@@ -64,6 +71,8 @@ Real-Time-Data-Engineering-Pipeline/
 ├── config.py
 ├── dashboard.py
 ├── docker-compose.yml
+├── export_events_to_bigquery.py
+├── export_metrics_to_bigquery.py
 ├── images/
 │   ├── cassandra-validation.png
 │   ├── dashboard-screenshot.png
@@ -96,7 +105,8 @@ Real-Time-Data-Engineering-Pipeline/
 1. A producer sends JSON event records into the Kafka topic.
 2. `spark_kafka_to_cassandra.py` reads the stream and writes parsed events into Cassandra `events`.
 3. `spark_kafka_source_metrics.py` reads the same stream, groups by `source`, and writes event counts plus revenue totals into Cassandra `source_metrics`.
-4. The Streamlit dashboard reads Cassandra and displays KPIs, charts, and raw event records.
+4. The dashboard reads Cassandra and displays KPIs, charts, and raw event records.
+5. Export scripts move curated results into BigQuery tables for reporting and presentation use.
 
 ---
 
@@ -113,11 +123,11 @@ A clean validation run produced:
 
 ## Screenshots
 
+### Pipeline Diagram (Streaming Core)
+![Pipeline Diagram](images/diagram.png)
+
 ### Cassandra Validation
 ![Cassandra Validation](images/cassandra-validation.png)
-
-### Pipeline Diagram
-![Pipeline Diagram](images/diagram.png)
 
 ### BigQuery Events
 ![BigQuery Events](images/bigquery-events.png)
@@ -125,8 +135,16 @@ A clean validation run produced:
 ### BigQuery Metrics
 ![BigQuery Metrics](images/bigquery-metrics.png)
 
-### Looker Studio Dashboard
-![Looker Studio Dashboard](images/dashboard-screenshot.png)
+### Dashboard Screenshot
+![Dashboard Screenshot](images/dashboard-screenshot.png)
+
+---
+
+## Notes on Diagram Scope
+
+The current pipeline diagram focuses on the streaming core path: Kafka, Spark, Cassandra, and the dashboard layer.
+
+BigQuery and reporting outputs are included in the overall project workflow, but the static `diagram.png` currently represents the core streaming architecture rather than the full reporting extension.
 
 ---
 
@@ -191,7 +209,14 @@ SELECT * FROM events;
 SELECT * FROM source_metrics;
 ```
 
-### 5. Run the dashboard
+### 5. Export to BigQuery
+
+```bash
+python export_events_to_bigquery.py
+python export_metrics_to_bigquery.py
+```
+
+### 6. Run the dashboard
 
 ```bash
 python -m streamlit run dashboard.py
@@ -229,6 +254,7 @@ A clean replay requires more than truncating Cassandra because Kafka topic histo
 6. Restart the Spark jobs.
 7. Replay test events.
 8. Re-run Cassandra validation queries.
+9. Re-export fresh outputs to BigQuery if needed.
 
 Example reset commands:
 
@@ -254,6 +280,7 @@ This project addressed several practical issues common in streaming setups:
 - Python 3.12 caused Cassandra driver issues for the dashboard, so the dashboard environment was kept on Python 3.11.
 - Cassandra table resets alone were not enough because Kafka history and Spark checkpoints could still replay old data.
 - The raw-events job and the metrics job had to be validated independently.
+- Reporting outputs needed a clearer separation between the streaming layer and the export layer.
 
 ---
 
@@ -270,4 +297,4 @@ This project was inspired by the original idea from:
 
 - [JesusdelCas99/Real-Time-Data-Engineering-Pipeline](https://github.com/JesusdelCas99/Real-Time-Data-Engineering-Pipeline)
 
-This version adds a customized dataset, a Streamlit dashboard, validation improvements, operational documentation, and reproducible local reset workflows.
+This version adds a customized dataset, dashboard reporting, validation improvements, BigQuery export support, operational documentation, and reproducible local reset workflows.
