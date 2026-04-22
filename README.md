@@ -133,13 +133,8 @@ A clean validation run produced:
 ### BigQuery Metrics
 ![BigQuery Metrics](images/bigquery-metrics.png)
 
----
-
-## Note on Reporting Image
-
-The top image in this README is the main dashboard screenshot used as the project hero image.
-
-If you later add a separate Looker Studio screenshot file such as `images/looker-studio-dashboard.png`, you can include it in the screenshots section without duplicating the hero image.
+### Looker Studio Dashboard
+![Looker Studio Dashboard](images/looker-studio-dashboard.png)
 
 ---
 
