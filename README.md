@@ -1,7 +1,7 @@
 # Real-Time Data Pipeline by Hoang
 
 <p align="center">
-  <img src="images/dashboard-screenshot.png" alt="Looker Studio Dashboard" width="900">
+  <img src="images/dashboard-screenshot.png" alt="Dashboard Screenshot" width="900">
 </p>
 
 A real-time data engineering project that ingests JSON event data through Kafka, processes it with Spark Structured Streaming, stores raw and aggregated outputs in Cassandra, and visualizes the results in a Streamlit dashboard.
@@ -67,7 +67,9 @@ Real-Time-Data-Engineering-Pipeline/
 ├── images/
 │   ├── cassandra-validation.png
 │   ├── dashboard-screenshot.png
-│   └── diagram.png
+│   ├── diagram.png
+│   ├── bigquery-events.png
+│   └── bigquery-metrics.png
 ├── spark_kafka.py
 ├── spark_kafka_json.py
 ├── spark_kafka_source_metrics.py
@@ -116,6 +118,15 @@ A clean validation run produced:
 
 ### Pipeline Diagram
 ![Pipeline Diagram](images/diagram.png)
+
+### BigQuery Events
+![BigQuery Events](images/bigquery-events.png)
+
+### BigQuery Metrics
+![BigQuery Metrics](images/bigquery-metrics.png)
+
+### Looker Studio Dashboard
+![Looker Studio Dashboard](images/dashboard-screenshot.png)
 
 ---
 
