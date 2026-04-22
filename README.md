@@ -31,10 +31,10 @@ flowchart LR
     B -->|stream read| D[Spark Job 2<br/>Source Metrics Aggregator]
     C -->|write raw events| E[Cassandra Table<br/>events]
     D -->|write aggregated metrics| F[Cassandra Table<br/>source_metrics]
-    E -->|query raw events| G[Streamlit Dashboard]
-    F -->|query KPIs & metrics| G
     E -->|export events| H[BigQuery<br/>events]
     F -->|export metrics| I[BigQuery<br/>source_metrics]
+    E -->|query raw events| G[Streamlit Dashboard]
+    F -->|query KPIs & metrics| G
 ```
 
 ---
@@ -93,6 +93,7 @@ Real-Time-Data-Engineering-Pipeline/
 │   └── validation.py
 ├── RUNBOOK.md
 ├── MONITORING.md
+├── LICENSE
 └── README.md
 ```
 
@@ -135,6 +136,16 @@ A clean validation run produced:
 
 ### Looker Studio Dashboard
 ![Looker Studio Dashboard](images/looker-studio-dashboard.png)
+
+---
+
+## Key Engineering Decisions
+
+- Split the streaming pipeline into two Spark jobs: one for raw event persistence and one for source-level aggregation. This made validation easier and helped isolate logic for raw ingestion versus metrics generation.
+- Used Cassandra as the operational store for low-latency validation of both raw and aggregated outputs before exporting curated results to BigQuery.
+- Exported data to BigQuery as a separate reporting step so the streaming layer and analytics layer stayed decoupled.
+- Kept the dashboard environment on Python 3.11 to avoid Cassandra driver compatibility issues seen with Python 3.12.
+- Used clean Kafka topics and checkpoint resets to ensure reproducible validation runs and avoid replay confusion during testing.
 
 ---
 
@@ -278,6 +289,12 @@ This project addressed several practical issues common in streaming setups:
 
 - `RUNBOOK.md` — startup, reset, validation, and troubleshooting
 - `MONITORING.md` — health checks, expected outputs, and troubleshooting order
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
 
 ---
 
