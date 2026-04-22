@@ -4,19 +4,19 @@
   <img src="images/dashboard-screenshot.png" alt="Dashboard Screenshot" width="900">
 </p>
 
-A real-time data engineering project that ingests JSON event data through Kafka, processes it with Spark Structured Streaming, stores raw and aggregated outputs in Cassandra, exports curated results to BigQuery, and visualizes the outputs in dashboard-style reporting views.
+A real-time data engineering project that ingests JSON event data through Kafka, processes it with Spark Structured Streaming, stores raw and aggregated outputs in Cassandra, exports curated results to BigQuery, and visualizes the outputs through dashboard-style reporting.
 
-This project was built as a portfolio-style demo to show end-to-end streaming, validation, debugging, cloud export, and operational thinking.
+This project was built as a portfolio-style demo to show end-to-end streaming, validation, debugging, export workflows, and operational thinking.
 
 ---
 
 ## Highlights
 
-- Kafka-based ingestion of streaming JSON events
+- Kafka-based ingestion of streaming JSON event data
 - Spark jobs for raw event persistence and source-level aggregation
 - Cassandra storage for `events` and `source_metrics`
-- Export scripts for BigQuery reporting tables
-- Dashboard and reporting screenshots for validation and presentation
+- BigQuery export scripts for reporting-ready tables
+- Dashboard and analytics screenshots for validation and presentation
 - Pytest coverage for configuration, validation, and dashboard loading logic
 - Docker Compose setup for a reproducible local environment
 
@@ -35,8 +35,6 @@ flowchart LR
     F -->|query KPIs & metrics| G
     E -->|export events| H[BigQuery<br/>events]
     F -->|export metrics| I[BigQuery<br/>source_metrics]
-    H --> J[Reporting Layer]
-    I --> J
 ```
 
 ---
@@ -45,7 +43,7 @@ flowchart LR
 
 The goal of this project is to demonstrate a practical real-time streaming pipeline using tools commonly used in modern data engineering workflows. It also shows reproducibility, validation, debugging, and reporting readiness.
 
-The system answers a simple near-real-time analytics question: what events are arriving, which traffic sources produced them, and how much revenue is associated with each source?
+The system answers a near-real-time analytics question: what events are arriving, which traffic sources produced them, and how much revenue is associated with each source?
 
 ---
 
@@ -57,10 +55,10 @@ The system answers a simple near-real-time analytics question: what events are a
 | Stream processing | Spark Structured Streaming | Reads Kafka data, validates it, and computes aggregates |
 | Database | Apache Cassandra | Stores raw events and source-level metrics |
 | Dashboard | Streamlit | Displays KPIs, charts, and raw event tables |
-| Cloud analytics | BigQuery | Stores exported event and metrics tables for reporting |
-| Reporting | Looker Studio | Visualizes curated analytics outputs |
+| Cloud analytics | BigQuery | Stores exported events and metrics tables |
+| Reporting | Looker Studio | Visualizes exported analytics outputs |
 | Containerization | Docker Compose | Runs the local multi-service environment |
-| Language | Python | Implements Spark jobs, validation, dashboard logic, and exports |
+| Language | Python | Implements Spark jobs, validation, dashboard logic, and export scripts |
 
 ---
 
@@ -106,7 +104,7 @@ Real-Time-Data-Engineering-Pipeline/
 2. `spark_kafka_to_cassandra.py` reads the stream and writes parsed events into Cassandra `events`.
 3. `spark_kafka_source_metrics.py` reads the same stream, groups by `source`, and writes event counts plus revenue totals into Cassandra `source_metrics`.
 4. The dashboard reads Cassandra and displays KPIs, charts, and raw event records.
-5. Export scripts move curated results into BigQuery tables for reporting and presentation use.
+5. Export scripts move curated outputs into BigQuery for cloud analytics and reporting.
 
 ---
 
@@ -135,16 +133,13 @@ A clean validation run produced:
 ### BigQuery Metrics
 ![BigQuery Metrics](images/bigquery-metrics.png)
 
-### Dashboard Screenshot
-![Dashboard Screenshot](images/dashboard-screenshot.png)
-
 ---
 
-## Notes on Diagram Scope
+## Note on Reporting Image
 
-The current pipeline diagram focuses on the streaming core path: Kafka, Spark, Cassandra, and the dashboard layer.
+The top image in this README is the main dashboard screenshot used as the project hero image.
 
-BigQuery and reporting outputs are included in the overall project workflow, but the static `diagram.png` currently represents the core streaming architecture rather than the full reporting extension.
+If you later add a separate Looker Studio screenshot file such as `images/looker-studio-dashboard.png`, you can include it in the screenshots section without duplicating the hero image.
 
 ---
 
@@ -280,7 +275,7 @@ This project addressed several practical issues common in streaming setups:
 - Python 3.12 caused Cassandra driver issues for the dashboard, so the dashboard environment was kept on Python 3.11.
 - Cassandra table resets alone were not enough because Kafka history and Spark checkpoints could still replay old data.
 - The raw-events job and the metrics job had to be validated independently.
-- Reporting outputs needed a clearer separation between the streaming layer and the export layer.
+- Export and reporting outputs required separate presentation from the streaming core.
 
 ---
 
