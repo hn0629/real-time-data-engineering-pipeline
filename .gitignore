@@ -57,3 +57,14 @@ airflow/logs/
 
 # Spark dependency cache
 spark/ivy-cache/
+
+# Spark Structured Streaming runtime checkpoints
+spark/checkpoints/
+
+# Additional local Spark runtime paths
+spark/ivy-cache/
+spark/metastore_db/
+
+*.crc
+spark/jobs/*.log
+spark/derby.log

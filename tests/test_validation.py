@@ -74,6 +74,18 @@ def test_get_invalid_raw_events_returns_only_invalid_rows(spark):
     assert invalid_df.count() == 1
 
 
+def test_get_invalid_raw_events_rejects_blank_required_fields(spark):
+    data = [
+        ("1", "u1", "view", "", "19.99", "2026-04-15T18:00:00", "web")
+    ]
+
+    df = spark.createDataFrame(data, SCHEMA)
+    prepared_df = prepare_events_df(df)
+    invalid_df = get_invalid_raw_events(prepared_df)
+
+    assert invalid_df.count() == 1
+
+
 def test_get_valid_metric_events_returns_only_valid_rows(spark):
     data = [
         ("1", "u1", "view", "p1", "19.99", "2026-04-15T18:00:00", "web"),

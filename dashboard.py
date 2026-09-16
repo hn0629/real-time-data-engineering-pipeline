@@ -1,5 +1,7 @@
+import os
 from datetime import datetime
 
+import config
 import pandas as pd
 import streamlit as st
 from cassandra.cluster import Cluster, Session
@@ -9,9 +11,9 @@ st.set_page_config(
     layout="wide",
 )
 
-CASSANDRA_HOST = "localhost"
+CASSANDRA_HOST = os.getenv("CASSANDRA_HOST", config.CASSANDRA_HOST)
 CASSANDRA_PORT = 9042
-CASSANDRA_KEYSPACE = "realtime_pipeline"
+CASSANDRA_KEYSPACE = config.CASSANDRA_KEYSPACE
 
 EXPECTED_RAW_ROWS = 3
 EXPECTED_METRIC_ROWS = 2

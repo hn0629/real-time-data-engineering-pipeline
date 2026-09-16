@@ -1,6 +1,6 @@
 import config
 from pyspark.sql import Column, DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, trim
 from pyspark.sql.types import DoubleType
 
 
@@ -19,6 +19,11 @@ def prepare_events_df(df: DataFrame) -> DataFrame:
     return df.withColumn("price", col("price").cast(DoubleType()))
 
 
+def _has_value(column_name: str) -> Column:
+    """Return True when a required string field is present and not blank."""
+    return col(column_name).isNotNull() & (trim(col(column_name)) != "")
+
+
 def _is_valid_raw_event() -> Column:
     """Build the validation rule for raw event records.
 
@@ -26,11 +31,13 @@ def _is_valid_raw_event() -> Column:
         A Spark column expression that evaluates to True for valid raw events.
     """
     return (
-        col("event_id").isNotNull()
-        & col("user_id").isNotNull()
+        _has_value("event_id")
+        & _has_value("user_id")
+        & _has_value("event_type")
         & col("event_type").isin(*config.ALLOWED_EVENT_TYPES)
-        & col("event_time").isNotNull()
-        & col("source").isNotNull()
+        & _has_value("product_id")
+        & _has_value("event_time")
+        & _has_value("source")
         & col("price").isNotNull()
     )
 
@@ -42,9 +49,10 @@ def _is_valid_metric_event() -> Column:
         A Spark column expression that evaluates to True for valid metric rows.
     """
     return (
-        col("event_id").isNotNull()
+        _has_value("event_id")
+        & _has_value("event_type")
         & col("event_type").isin(*config.ALLOWED_EVENT_TYPES)
-        & col("source").isNotNull()
+        & _has_value("source")
         & col("price").isNotNull()
     )
 
