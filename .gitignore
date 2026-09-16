@@ -16,9 +16,44 @@ __pycache__/
 
 # Environment files
 .env
+*.env
 
 # OS / editor files
 .DS_Store
 Thumbs.db
 .vscode/
-.idea/
+.idea/.env
+.env
+.env
+
+# Google Cloud credentials and local ADC/service-account files
+gcp/*.json
+gcp/*.pem
+gcp/*.key
+gcp/.env
+
+# Generated pipeline data
+data/raw/
+data/clean/
+data/analytics/
+data/checkpoints/
+data/metrics/
+data/quarantine/
+
+# Generated monitoring output
+data/monitoring/pipeline_status.json
+data/monitoring/pipeline_health.log
+data/monitoring/write_test.txt
+
+# Keep only the empty monitoring directory placeholder
+!data/monitoring/
+!data/monitoring/.gitkeep
+
+# Docker/local backup files
+docker-compose.backup.yml
+
+# Airflow runtime logs
+airflow/logs/
+
+# Spark dependency cache
+spark/ivy-cache/
