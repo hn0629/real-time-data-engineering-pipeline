@@ -190,11 +190,15 @@ services:
       - .env
     volumes:
       - ./dashboard:/app
+      - ./llm:/app/llm:ro
+      - ./data:/app/data:ro
       - ./data:/opt/spark-data:ro
     environment:
       PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app
+      DATA_BASE_PATH: /opt/spark-data
     command: >
-      sh -c "pip install --no-cache-dir streamlit pandas pyarrow &&
+      sh -c "pip install --no-cache-dir streamlit pandas pyarrow openai python-dotenv &&
              streamlit run app.py --server.address=0.0.0.0 --server.port=8501"
     ports:
       - "8501:8501"

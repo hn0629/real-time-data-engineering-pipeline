@@ -1,7 +1,20 @@
+import json
 from pathlib import Path
+import sys
 
 import pandas as pd
 import streamlit as st
+
+
+APP_ROOT = Path("/app")
+
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from llm.analytics_backend import (
+    load_analytics,
+    load_pipeline_status,
+)
 
 
 st.set_page_config(
@@ -11,117 +24,312 @@ st.set_page_config(
 )
 
 
-CLEAN_PATH = Path("/opt/spark-data/clean/stock_prices")
-METRICS_PATH = Path("/opt/spark-data/metrics/stream_batches")
-QUARANTINE_PATH = Path("/opt/spark-data/quarantine/stock_prices")
+ANALYTICS_ROOT = Path(
+    "/opt/spark-data/analytics/stock_price_summary"
+)
+
+STATUS_PATH = Path(
+    "/opt/spark-data/monitoring/pipeline_status.json"
+)
 
 REFRESH_TTL_SECONDS = 60
 
+REQUIRED_ANALYTICS_COLUMNS = {
+    "symbol",
+    "source",
+    "tick_count",
+    "min_price",
+    "max_price",
+    "avg_price",
+    "latest_price",
+    "first_event_time",
+    "last_event_time",
+    "processed_at",
+}
 
-def parquet_files(path: Path) -> list[Path]:
-    if not path.exists():
+
+def available_partitions() -> list[Path]:
+    if not ANALYTICS_ROOT.exists():
         return []
 
     return sorted(
-        path.rglob("*.parquet"),
-        key=lambda file: file.stat().st_mtime,
-        reverse=True,
+        path
+        for path in ANALYTICS_ROOT.iterdir()
+        if path.is_dir()
+        and path.name.startswith("event_date=")
     )
 
 
-@st.cache_data(ttl=REFRESH_TTL_SECONDS)
-def load_parquet_dataset(path_as_string: str) -> pd.DataFrame:
-    path = Path(path_as_string)
-    files = parquet_files(path)
+def latest_partition() -> Path | None:
+    partitions = available_partitions()
 
-    if not files:
+    if not partitions:
+        return None
+
+    return partitions[-1]
+
+
+@st.cache_data(
+    ttl=REFRESH_TTL_SECONDS,
+    show_spinner="Loading latest Analytics summary...",
+)
+def load_analytics() -> pd.DataFrame:
+    partition = latest_partition()
+
+    if partition is None:
         return pd.DataFrame()
 
     try:
-        return pd.read_parquet(files, engine="pyarrow")
-    except Exception as exc:
-        st.error(f"Could not read Parquet files from {path}: {exc}")
+        dataframe = pd.read_parquet(
+            partition,
+            engine="pyarrow",
+        )
+    except Exception as error:
+        st.error(
+            f"Could not read Analytics data from {partition}: "
+            f"{error}"
+        )
         return pd.DataFrame()
 
+    if not REQUIRED_ANALYTICS_COLUMNS.issubset(
+        dataframe.columns
+    ):
+        return pd.DataFrame()
 
-def prepare_clean_events(events_df: pd.DataFrame) -> pd.DataFrame:
-    if events_df.empty:
-        return events_df
+    if "event_date" not in dataframe.columns:
+        dataframe = dataframe.copy()
+        dataframe["event_date"] = partition.name.split(
+            "=",
+            1,
+        )[1]
 
-    events_df = events_df.copy()
+    return dataframe
 
-    if "event_time" in events_df.columns:
-        events_df["event_time"] = pd.to_datetime(
-            events_df["event_time"],
-            errors="coerce",
-            utc=True,
+
+@st.cache_data(
+    ttl=REFRESH_TTL_SECONDS,
+    show_spinner="Loading pipeline health status...",
+)
+def load_pipeline_status() -> dict:
+    if not STATUS_PATH.exists():
+        return {
+            "available": False,
+            "message": (
+                "No pipeline health artifact was found at "
+                f"{STATUS_PATH}."
+            ),
+        }
+
+    try:
+        payload = json.loads(
+            STATUS_PATH.read_text(encoding="utf-8")
         )
+    except (
+        OSError,
+        json.JSONDecodeError,
+    ) as error:
+        return {
+            "available": False,
+            "message": (
+                "Pipeline health artifact could not be read: "
+                f"{error}"
+            ),
+        }
 
-    if "ingested_at" in events_df.columns:
-        events_df["ingested_at"] = pd.to_datetime(
-            events_df["ingested_at"],
-            errors="coerce",
-            utc=True,
-        )
+    if not isinstance(payload, dict):
+        return {
+            "available": False,
+            "message": (
+                "Pipeline health artifact has an invalid format."
+            ),
+        }
 
-    if "price" in events_df.columns:
-        events_df["price"] = pd.to_numeric(
-            events_df["price"],
-            errors="coerce",
-        )
+    return {
+        "available": True,
+        "status": payload,
+    }
 
-    return events_df.dropna(
-        subset=[
-            column
-            for column in ["symbol", "price", "event_time"]
-            if column in events_df.columns
-        ]
+
+def value_from(
+    payload: dict,
+    *keys: str,
+) -> object:
+    for key in keys:
+        if key in payload:
+            return payload[key]
+
+    return None
+
+
+def format_price(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+
+    try:
+        return f"{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def format_timestamp(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+
+    timestamp = pd.to_datetime(
+        value,
+        errors="coerce",
+        utc=True,
+    )
+
+    if pd.isna(timestamp):
+        return str(value)
+
+    return timestamp.strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
     )
 
 
-def prepare_metrics(metrics_df: pd.DataFrame) -> pd.DataFrame:
-    if metrics_df.empty:
-        return metrics_df
+def render_pipeline_health(
+    status_response: dict,
+) -> None:
+    st.subheader("Pipeline health")
 
-    metrics_df = metrics_df.copy()
+    if not status_response.get("available"):
+        st.warning(
+            status_response.get(
+                "message",
+                "Pipeline health status is unavailable.",
+            )
+        )
+        return
 
-    for column in [
-        "raw_count",
-        "clean_count",
-        "quarantine_count",
-        "batch_id",
-    ]:
-        if column in metrics_df.columns:
-            metrics_df[column] = pd.to_numeric(
-                metrics_df[column],
-                errors="coerce",
+    status = status_response.get("status")
+
+    if not isinstance(status, dict):
+        st.warning(
+            "Pipeline health status has an invalid format."
+        )
+        return
+
+    overall_status = value_from(
+        status,
+        "status",
+        "state",
+    )
+
+    checked_at = value_from(
+        status,
+        "checked_at_utc",
+        "checked_at",
+        "generated_at",
+        "updated_at",
+    )
+
+    services = status.get("services", {})
+
+    errors_seen = value_from(
+        status,
+        "errors_seen",
+        "errors",
+    )
+
+    health_left, health_right = st.columns((1, 2))
+
+    with health_left:
+        if str(overall_status).lower() == "healthy":
+            st.success(
+                f"Overall status: {overall_status}"
+            )
+        elif overall_status:
+            st.warning(
+                f"Overall status: {overall_status}"
+            )
+        else:
+            st.info("Overall status: unknown")
+
+        if checked_at:
+            st.caption(
+                "Checked at: "
+                + format_timestamp(checked_at)
             )
 
-    if "processed_at_utc" in metrics_df.columns:
-        metrics_df["processed_at_utc"] = pd.to_datetime(
-            metrics_df["processed_at_utc"],
-            errors="coerce",
-            utc=True,
-        )
+        if isinstance(errors_seen, list):
+            if errors_seen:
+                st.error(
+                    "Errors seen: "
+                    + "; ".join(map(str, errors_seen))
+                )
+            else:
+                st.caption("Errors seen: none")
 
-    return metrics_df
+    with health_right:
+        if not isinstance(services, dict) or not services:
+            st.info(
+                "No individual service checks are available."
+            )
+            return
+
+        rows = []
+
+        for name, service in services.items():
+            if isinstance(service, dict):
+                rows.append(
+                    {
+                        "Service": name,
+                        "Status": value_from(
+                            service,
+                            "status",
+                            "state",
+                        )
+                        or "unknown",
+                        "Message": value_from(
+                            service,
+                            "message",
+                            "detail",
+                            "reason",
+                        )
+                        or "",
+                    }
+                )
+            else:
+                rows.append(
+                    {
+                        "Service": name,
+                        "Status": str(service),
+                        "Message": "",
+                    }
+                )
+
+        st.dataframe(
+            pd.DataFrame(rows),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 with st.sidebar:
     st.header("Dashboard controls")
+
     st.caption(
-        "Metrics are read from local Spark Parquet outputs. "
-        "The Spark stream writes new micro-batches continuously."
+        "Read-only dashboard using the newest local "
+        "Analytics Parquet partition."
     )
 
-    if st.button("Refresh now", use_container_width=True):
+    if st.button(
+        "Refresh now",
+        use_container_width=True,
+    ):
         st.cache_data.clear()
         st.rerun()
 
     st.divider()
 
-    st.subheader("Data source")
-    st.code("/opt/spark-data/clean/stock_prices")
+    st.subheader("Analytics source")
+    st.code(
+        "/opt/spark-data/analytics/"
+        "stock_price_summary/"
+        "event_date=YYYY-MM-DD"
+    )
 
     st.subheader("Refresh cache")
     st.write(f"{REFRESH_TTL_SECONDS} seconds")
@@ -129,56 +337,122 @@ with st.sidebar:
 
 st.title("📈 Real-Time Market Data Pipeline")
 st.caption(
-    "Kafka → Spark Structured Streaming → Local Parquet → Streamlit"
+    "Kafka → Spark Structured Streaming → Raw / Clean / "
+    "Quarantine → Analytics Parquet → Streamlit"
 )
 
-clean_events = prepare_clean_events(
-    load_parquet_dataset(str(CLEAN_PATH))
-)
+analytics_summary = load_analytics()
+pipeline_status = load_pipeline_status()
 
-batch_metrics = prepare_metrics(
-    load_parquet_dataset(str(METRICS_PATH))
-)
+render_pipeline_health(pipeline_status)
 
-quarantine_events = load_parquet_dataset(str(QUARANTINE_PATH))
+st.divider()
 
-if clean_events.empty:
+if analytics_summary.empty:
     st.warning(
-        "No clean events are available yet. "
-        "Confirm the Spark streaming job is running and writing Parquet files."
+        "No readable Analytics summary was found in the "
+        "latest event_date partition. Confirm that the "
+        "Spark analytics job has produced output under "
+        "/opt/spark-data/analytics/stock_price_summary."
     )
     st.stop()
 
-latest_event_time = clean_events["event_time"].max()
-now_utc = pd.Timestamp.now(tz="UTC")
-freshness_seconds = max(
-    0,
-    int((now_utc - latest_event_time).total_seconds()),
+for column in [
+    "tick_count",
+    "min_price",
+    "max_price",
+    "avg_price",
+    "latest_price",
+]:
+    analytics_summary[column] = pd.to_numeric(
+        analytics_summary[column],
+        errors="coerce",
+    )
+
+for column in [
+    "first_event_time",
+    "last_event_time",
+    "processed_at",
+]:
+    analytics_summary[column] = pd.to_datetime(
+        analytics_summary[column],
+        errors="coerce",
+        utc=True,
+    )
+
+analytics_summary["symbol"] = (
+    analytics_summary["symbol"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
 )
 
-latest_by_symbol = (
-    clean_events
-    .sort_values("event_time")
-    .groupby("symbol", as_index=False)
-    .tail(1)
-    .sort_values("symbol")
+analytics_summary["source"] = (
+    analytics_summary["source"]
+    .astype(str)
+    .str.strip()
 )
 
-total_clean_events = len(clean_events)
-unique_symbols = clean_events["symbol"].nunique()
-quarantine_count = len(quarantine_events)
+latest_event_time = analytics_summary[
+    "last_event_time"
+].max()
 
-if not batch_metrics.empty and "raw_count" in batch_metrics.columns:
-    total_raw_events = int(batch_metrics["raw_count"].fillna(0).sum())
+if pd.notna(latest_event_time):
+    now_utc = pd.Timestamp.now(tz="UTC")
+
+    freshness_seconds = max(
+        0,
+        int(
+            (
+                now_utc - latest_event_time
+            ).total_seconds()
+        ),
+    )
+
+    latest_event_display = latest_event_time.strftime(
+        "%H:%M:%S"
+    )
+
+    freshness_display = f"{freshness_seconds}s"
 else:
-    total_raw_events = total_clean_events + quarantine_count
+    latest_event_display = "Unavailable"
+    freshness_display = "Unavailable"
+
+total_ticks = int(
+    analytics_summary["tick_count"].fillna(0).sum()
+)
+
+unique_symbols = analytics_summary["symbol"].nunique()
+
+latest_event_date = analytics_summary[
+    "event_date"
+].astype(str).max()
 
 metric_1, metric_2, metric_3, metric_4 = st.columns(4)
 
-metric_1.metric("Clean events", f"{total_clean_events:,}")
-metric_2.metric("Unique symbols", unique_symbols)
-metric_3.metric("Latest event (UTC)", latest_event_time.strftime("%H:%M:%S"))
-metric_4.metric("Freshness", f"{freshness_seconds}s")
+metric_1.metric(
+    "Analytics ticks",
+    f"{total_ticks:,}",
+)
+
+metric_2.metric(
+    "Unique symbols",
+    unique_symbols,
+)
+
+metric_3.metric(
+    "Latest event (UTC)",
+    latest_event_display,
+)
+
+metric_4.metric(
+    "Freshness",
+    freshness_display,
+)
+
+st.caption(
+    f"Latest Analytics partition: {latest_event_date}"
+)
 
 st.divider()
 
@@ -187,14 +461,36 @@ left_column, right_column = st.columns((2, 1))
 with left_column:
     st.subheader("Latest price by symbol")
 
-    latest_prices = latest_by_symbol[
-        ["symbol", "price", "event_time"]
-    ].rename(
-        columns={
-            "symbol": "Symbol",
-            "price": "Latest price",
-            "event_time": "Event time (UTC)",
-        }
+    latest_prices = (
+        analytics_summary[
+            [
+                "symbol",
+                "source",
+                "latest_price",
+                "last_event_time",
+                "tick_count",
+            ]
+        ]
+        .sort_values(["symbol", "source"])
+        .rename(
+            columns={
+                "symbol": "Symbol",
+                "source": "Source",
+                "latest_price": "Latest price",
+                "last_event_time": "Last event (UTC)",
+                "tick_count": "Tick count",
+            }
+        )
+    )
+
+    latest_prices["Latest price"] = (
+        latest_prices["Latest price"].map(format_price)
+    )
+
+    latest_prices["Last event (UTC)"] = (
+        latest_prices["Last event (UTC)"].map(
+            format_timestamp
+        )
     )
 
     st.dataframe(
@@ -204,25 +500,27 @@ with left_column:
     )
 
 with right_column:
-    st.subheader("Pipeline quality")
+    st.subheader("Analytics coverage")
 
-    quality_data = pd.DataFrame(
+    coverage = pd.DataFrame(
         {
             "Metric": [
-                "Raw events",
-                "Clean events",
-                "Quarantined events",
+                "Analytics rows",
+                "Analytics ticks",
+                "Symbols",
+                "Sources",
             ],
-            "Count": [
-                total_raw_events,
-                total_clean_events,
-                quarantine_count,
+            "Value": [
+                len(analytics_summary),
+                total_ticks,
+                unique_symbols,
+                analytics_summary["source"].nunique(),
             ],
         }
     )
 
     st.dataframe(
-        quality_data,
+        coverage,
         use_container_width=True,
         hide_index=True,
     )
@@ -232,114 +530,89 @@ st.divider()
 chart_left, chart_right = st.columns(2)
 
 with chart_left:
-    st.subheader("Price trend")
+    st.subheader("Price range by symbol")
 
-    selected_symbols = st.multiselect(
-        "Symbols",
-        options=sorted(clean_events["symbol"].unique()),
-        default=sorted(clean_events["symbol"].unique()),
+    price_range = (
+        analytics_summary[
+            [
+                "symbol",
+                "min_price",
+                "avg_price",
+                "max_price",
+            ]
+        ]
+        .groupby(
+            "symbol",
+            as_index=True,
+        )
+        .max()
+        .sort_index()
     )
 
-    chart_events = clean_events[
-        clean_events["symbol"].isin(selected_symbols)
-    ].copy()
+    st.bar_chart(
+        price_range,
+        use_container_width=True,
+    )
 
-    if not chart_events.empty:
-        chart_data = (
-            chart_events
-            .sort_values("event_time")
-            .pivot_table(
-                index="event_time",
-                columns="symbol",
-                values="price",
-                aggfunc="last",
+with chart_right:
+    st.subheader("Analytics summary")
+
+    display_summary = (
+        analytics_summary[
+            [
+                "symbol",
+                "source",
+                "tick_count",
+                "min_price",
+                "avg_price",
+                "max_price",
+                "latest_price",
+                "first_event_time",
+                "last_event_time",
+                "processed_at",
+            ]
+        ]
+        .sort_values(["symbol", "source"])
+        .copy()
+    )
+
+    for column in [
+        "min_price",
+        "avg_price",
+        "max_price",
+        "latest_price",
+    ]:
+        display_summary[column] = (
+            display_summary[column].map(format_price)
+        )
+
+    for column in [
+        "first_event_time",
+        "last_event_time",
+        "processed_at",
+    ]:
+        display_summary[column] = (
+            display_summary[column].map(
+                format_timestamp
             )
         )
 
-        st.line_chart(chart_data, use_container_width=True)
-
-with chart_right:
-    st.subheader("Price summary")
-
-    price_summary = (
-        clean_events
-        .groupby("symbol", as_index=False)["price"]
-        .agg(
-            min_price="min",
-            average_price="mean",
-            max_price="max",
-            event_count="count",
-        )
-        .sort_values("symbol")
-    )
-
-    price_summary["min_price"] = price_summary["min_price"].round(2)
-    price_summary["average_price"] = price_summary[
-        "average_price"
-    ].round(2)
-    price_summary["max_price"] = price_summary["max_price"].round(2)
-
     st.dataframe(
-        price_summary,
+        display_summary,
         use_container_width=True,
         hide_index=True,
     )
 
 st.divider()
 
-st.subheader("Most recent clean events")
+st.subheader("Data contract")
 
-recent_events = (
-    clean_events
-    .sort_values("event_time", ascending=False)
-    .head(50)
+st.markdown(
+    """
+- **Reader:** The dashboard reads the newest Analytics Parquet partition only.
+- **Grain:** One derived summary row per `event_date`, `symbol`, and `source`.
+- **Measures:** Tick count, minimum, maximum, average, and latest observed price.
+- **Boundaries:** Streamlit is read-only; Spark owns the Raw, Clean, Quarantine, Metrics, and Analytics writes.
+- **Assistant:** The local command-line assistant provides the same read-only, allowlisted pipeline and stock-summary lookups.
+    """
 )
-
-display_columns = [
-    column
-    for column in [
-        "symbol",
-        "price",
-        "source",
-        "event_time",
-        "ingested_at",
-        "kafka_topic",
-        "kafka_partition",
-        "kafka_offset",
-    ]
-    if column in recent_events.columns
-]
-
-st.dataframe(
-    recent_events[display_columns],
-    use_container_width=True,
-    hide_index=True,
-)
-
-if not batch_metrics.empty:
-    st.divider()
-    st.subheader("Recent Spark micro-batches")
-
-    metrics_columns = [
-        column
-        for column in [
-            "batch_id",
-            "raw_count",
-            "clean_count",
-            "quarantine_count",
-            "processed_at_utc",
-            "kafka_topic",
-        ]
-        if column in batch_metrics.columns
-    ]
-
-    st.dataframe(
-        batch_metrics
-        .sort_values(
-            "processed_at_utc",
-            ascending=False,
-        )
-        .head(25)[metrics_columns],
-        use_container_width=True,
-        hide_index=True,
-    )

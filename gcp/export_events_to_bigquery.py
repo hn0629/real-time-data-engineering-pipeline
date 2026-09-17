@@ -1,5 +1,7 @@
+import os
 from datetime import datetime, timezone
 
+import config
 from cassandra.cluster import Cluster
 from google.cloud import bigquery
 
@@ -7,9 +9,9 @@ PROJECT_ID = "steadfast-sign-473019-h5"
 DATASET_ID = "realtime_pipeline"
 TABLE_ID = "events"
 
-CASSANDRA_HOST = "localhost"
+CASSANDRA_HOST = os.getenv("CASSANDRA_HOST", config.CASSANDRA_HOST)
 CASSANDRA_PORT = 9042
-CASSANDRA_KEYSPACE = "realtime_pipeline"
+CASSANDRA_KEYSPACE = config.CASSANDRA_KEYSPACE
 
 
 def fetch_events():
