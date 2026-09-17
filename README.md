@@ -9,7 +9,7 @@ The project is designed as a local, reproducible data-engineering portfolio impl
 </p>
 
 ## Architecture
-
+For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 ```mermaid
 flowchart LR
     P[Stock Price Producer] -->|JSON stock ticks| K[Apache Kafka<br/>pipeline-events]
@@ -277,6 +277,7 @@ Operational validation checklist:
 - `data/monitoring/pipeline_status.json` reports `healthy`
 
 ## Screenshots
+
 
 ### Airflow DAGs
 
