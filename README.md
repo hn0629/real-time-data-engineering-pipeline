@@ -4,19 +4,7 @@ A containerized, end-to-end streaming data pipeline that ingests stock-price eve
 
 The project is designed as a reproducible, local-first data-engineering portfolio implementation. It demonstrates real-time ingestion, data quality, layered storage, cloud analytics, orchestration, monitoring, and controlled AI-assisted data exploration.
 
-<p align="center">
-
- <img
-
-   src="images/dashboard-overview.png"
-
-   alt="Streamlit dashboard showing real-time stock-price analytics and pipeline health"
-
-   width="1000"
-
- >
-
-</p>
+![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
 
 For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
