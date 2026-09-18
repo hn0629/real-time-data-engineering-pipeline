@@ -10,8 +10,6 @@ For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Architecture
 
-![Architecture overview of the Kafka, Spark, Parquet, Airflow, AWS, Streamlit, and LLM analytics pipeline](images/architecture-overview.png)
-
 ```mermaid
 
 flowchart TB
@@ -54,29 +52,29 @@ flowchart TB
 
 ## Pipeline Flow
 
-1\. A Python producer publishes JSON stock-price events to the Kafka topic `pipeline-events`.
+1. A Python producer publishes JSON stock-price events to the Kafka topic `pipeline-events`.
 
-2\. Spark Structured Streaming consumes Kafka micro-batches every 10 seconds.
+2. Spark Structured Streaming consumes Kafka micro-batches every 10 seconds.
 
-3\. Each batch is retained in the raw Parquet layer for traceability.
+3. Each batch is retained in the raw Parquet layer for traceability.
 
-4\. Spark validates required fields: a non-empty `symbol`, a positive numeric `price`, and `event_time`.
+4. Spark validates required fields: a non-empty `symbol`, a positive numeric `price`, and `event_time`.
 
-5\. Valid events are deduplicated using Kafka topic, partition, and offset, then written to partitioned clean Parquet data.
+5. Valid events are deduplicated using Kafka topic, partition, and offset, then written to partitioned clean Parquet data.
 
-6\. Invalid events are retained in the quarantine layer with a validation-error reason.
+6. Invalid events are retained in the quarantine layer with a validation-error reason.
 
-7\. Spark writes batch-level raw, clean, and quarantine counts to the metrics layer.
+7. Spark writes batch-level raw, clean, and quarantine counts to the metrics layer.
 
-8\. A Spark analytics job creates daily stock-price summaries by event date, symbol, and source.
+8. A Spark analytics job creates daily stock-price summaries by event date, symbol, and source.
 
-9\. Analytics Parquet is synchronized to Amazon S3 and queried through Athena.
+9. Analytics Parquet is synchronized to Amazon S3 and queried through Athena.
 
-10\. Airflow schedules data-quality checks, health checks, and Athena-refresh work.
+10. Airflow schedules data-quality checks, health checks, and Athena-refresh work.
 
-11\. The Streamlit dashboard reads the latest analytics partition and pipeline-health status.
+11. The Streamlit dashboard reads the latest analytics partition and pipeline-health status.
 
-12\. The Pipeline Analytics Assistant answers allowlisted natural-language questions about pipeline output and stock-price summaries.
+12. The Pipeline Analytics Assistant answers allowlisted natural-language questions about pipeline output and stock-price summaries.
 
 ## Tech Stack
 
