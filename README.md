@@ -1,10 +1,10 @@
 # AI-Assisted Real-Time Stock Analytics Platform
 
-A production-minded real-time data platform that ingests stock-price events with Apache Kafka, processes and validates streaming data with Spark Structured Streaming, and publishes analytics-ready datasets to Amazon S3 and Athena.
+A production-oriented real-time data platform that ingests stock price events using Apache Kafka, processes and validates streaming data with Spark Structured Streaming, and delivers analytics-ready datasets to Amazon S3 and Athena.
 
-The platform gives analysts a Streamlit dashboard and a guarded natural-language analytics assistant for exploring curated market-data summaries without writing SQL. It includes layered Parquet storage, data-quality quarantine handling, Airflow orchestration, health monitoring, and reproducible Docker-based local deployment.
+The platform provides a Streamlit dashboard and an LLM-powered natural language analytics assistant, enabling analysts to explore curated market data without writing SQL. It includes layered Parquet storage, data-quality validation with quarantine handling, Airflow orchestration, health monitoring, and reproducible Docker-based deployment.
 
-The project models a financial-data monitoring use case in which analysts need timely, validated market-data summaries, pipeline-health visibility, and governed access to curated analytics.
+This project models a financial data monitoring system where analysts require timely, reliable insights, pipeline observability, and controlled access to curated analytics.
 
 ![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
 
