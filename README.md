@@ -23,7 +23,7 @@ The platform gives analysts a Streamlit dashboard and a guarded natural-language
 >
 > **Assistant:** Returns the latest available prices, event timestamps, and processed tick counts from the curated Analytics Parquet output.
 
-![Pipeline Analytics Assistant returning latest prices for AAPL, MSFT, and NVDA](images/pipeline-analytics-assistant.png)
+![Short demo of the Pipeline Analytics Assistant answering a supported stock-price question](images/assistant-demo.gif)
 
 ### Explore pipeline health and analytics
 
