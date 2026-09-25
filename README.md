@@ -4,6 +4,8 @@ A production-minded real-time data platform that ingests stock-price events with
 
 The platform gives analysts a Streamlit dashboard and a guarded natural-language analytics assistant for exploring curated market-data summaries without writing SQL. It includes layered Parquet storage, data-quality quarantine handling, Airflow orchestration, health monitoring, and reproducible Docker-based local deployment.
 
+The project models a financial-data monitoring use case in which analysts need timely, validated market-data summaries, pipeline-health visibility, and governed access to curated analytics.
+
 ![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
 
 ## Key Features
