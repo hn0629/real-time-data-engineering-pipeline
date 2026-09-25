@@ -13,7 +13,7 @@ The platform gives analysts a Streamlit dashboard and a guarded natural-language
 - **Cloud analytics:** Curated analytics Parquet is synchronized to Amazon S3 and queried through Amazon Athena.
 - **Operational workflows:** Airflow schedules data-quality checks, service-health checks, retries, and Athena-refresh work.
 - **Analytics experience:** A Streamlit dashboard exposes current pipeline health, latest prices, summary metrics, and visual analytics.
-- **Natural-language exploration:** A guarded LLM assistant answers allowlisted questions against curated analytics output without arbitrary SQL execution or financial advice.
+- **Natural-language analytics:** An LLM-powered assistant translates supported business questions into safe, read-only analytics lookups over curated pipeline output.
 
 ## Demo
 
