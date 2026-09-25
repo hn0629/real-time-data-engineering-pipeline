@@ -1,82 +1,140 @@
-# Real-Time Stock Price Data Engineering Pipeline
+\# AI-Assisted Real-Time Stock Analytics Platform
 
-A containerized, end-to-end streaming data pipeline that ingests stock-price events from Apache Kafka, validates and processes them with Apache Spark Structured Streaming, persists traceable Parquet data layers, publishes analytics-ready data to Amazon S3 and Athena, monitors pipeline health through Apache Airflow, and exposes results through a Streamlit dashboard with a read-only LLM-powered analytics assistant.
 
-The project is designed as a reproducible, local-first data-engineering portfolio implementation. It demonstrates real-time ingestion, data quality, layered storage, cloud analytics, orchestration, monitoring, and controlled AI-assisted data exploration.
+A production-minded real-time data platform that ingests stock-price events with Apache Kafka, processes and validates streaming data with Spark Structured Streaming, and publishes analytics-ready datasets to Amazon S3 and Athena.
 
-![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
 
-For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
+The platform gives analysts a Streamlit dashboard and a guarded natural-language analytics assistant for exploring curated market-data summaries without writing SQL. It includes layered Parquet storage, data-quality quarantine handling, Airflow orchestration, health monitoring, and reproducible Docker-based local deployment.
 
-## Architecture
+
+!\[Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
+
+
+\## Key Features
+
+
+\- \*\*Real-time streaming:\*\* Kafka ingests stock-price ticks and Spark Structured Streaming processes micro-batches every 10 seconds.
+
+\- \*\*Data-quality controls:\*\* Required-field validation, Kafka-offset deduplication, and a quarantine layer retain invalid events with explicit rejection reasons.
+
+\- \*\*Cloud analytics:\*\* Curated analytics Parquet is synchronized to Amazon S3 and queried through Amazon Athena.
+
+\- \*\*Operational workflows:\*\* Airflow schedules data-quality checks, service-health checks, retries, and Athena-refresh work.
+
+\- \*\*Analytics experience:\*\* A Streamlit dashboard exposes current pipeline health, latest prices, summary metrics, and visual analytics.
+
+\- \*\*Natural-language exploration:\*\* A guarded LLM assistant answers allowlisted questions against curated analytics output without arbitrary SQL execution or financial advice.
+
+
+\## Demo
+
+
+\### Ask a natural-language question
+
+
+> \*\*User:\*\* Show latest prices for AAPL, MSFT, and NVDA.
+
+>
+
+> \*\*Assistant:\*\* Returns the latest available prices, event timestamps, and processed tick counts from the curated Analytics Parquet output.
+
+
+!\[Pipeline Analytics Assistant returning latest prices for AAPL, MSFT, and NVDA](images/pipeline-analytics-assistant.png)
+
+
+\### Explore pipeline health and analytics
+
+
+The dashboard above presents service-health status, analytics freshness, symbol-level latest prices, price-range summaries, and processed-tick coverage.
+
+
+\*\*Business value:\*\* The platform reduces time-to-insight by giving analysts a governed way to inspect fresh market-data summaries through a dashboard or natural-language questions, without manually querying raw streaming data or writing SQL.
+
+
+For the full system design, see \[ARCHITECTURE.md](ARCHITECTURE.md).
+
+
+\## Architecture
+
 
 ```mermaid
 
 flowchart TB
 
-   P[Stock Price Producer<br/>Python] -->|JSON stock ticks| K[Apache Kafka<br/>pipeline-events]
+   P\[Stock Price Producer<br/>Python] -->|JSON stock ticks| K\[Apache Kafka<br/>pipeline-events]
 
-   K -->|Structured Streaming| S[Apache Spark<br/>validates and deduplicates]
 
-   S -->|Raw events| R[Raw Parquet<br/>data/raw/stock_prices]
+   K -->|Structured Streaming| S\[Apache Spark<br/>validates and deduplicates]
 
-   S -->|Validated events| C[Clean Parquet<br/>data/clean/stock_prices]
 
-   S -->|Invalid records| Q[Quarantine Parquet<br/>data/quarantine/stock_prices]
+   S -->|Raw events| R\[Raw Parquet<br/>data/raw/stock\_prices]
 
-   S -->|Batch metrics| M[Metrics Parquet<br/>data/metrics/stream_batches]
+   S -->|Validated events| C\[Clean Parquet<br/>data/clean/stock\_prices]
 
-   C -->|Batch analytics job| A[Analytics Parquet<br/>stock_price_summary]
+   S -->|Invalid records| Q\[Quarantine Parquet<br/>data/quarantine/stock\_prices]
 
-   A -->|sync_to_s3.ps1| S3[Amazon S3]
+   S -->|Batch metrics| M\[Metrics Parquet<br/>data/metrics/stream\_batches]
 
-   S3 -->|Query| ATH[Amazon Athena<br/>v_latest_stock_price_summary]
 
-   A -->|Read Parquet| D[Streamlit Dashboard]
+   C -->|Batch analytics job| A\[Analytics Parquet<br/>stock\_price\_summary]
 
-   D -->|Natural-language queries| LLM[Pipeline Analytics Assistant<br/>LLM-powered]
+   A -->|sync\_to\_s3.ps1| S3\[Amazon S3]
 
-   AF[Apache Airflow] -->|Every 5 min| H[Health Check<br/>pipeline_status.json]
+   S3 -->|Query| ATH\[Amazon Athena<br/>v\_latest\_stock\_price\_summary]
 
-   AF -->|Scheduled| DQ[Data Quality Check]
 
-   AF -->|Every 30 min| AR[Athena Refresh]
+   A -->|Read Parquet| D\[Streamlit Dashboard]
 
-   H -->|Kafka, Spark, PostgreSQL| MON[data/monitoring<br/>JSON + log]
+   D -->|Natural-language queries| LLM\[Pipeline Analytics Assistant<br/>LLM-powered]
 
-   S -.->|Optional export| BQ[Google BigQuery<br/>realtime_pipeline]
+
+   AF\[Apache Airflow] -->|Every 5 min| H\[Health Check<br/>pipeline\_status.json]
+
+   AF -->|Scheduled| DQ\[Data Quality Check]
+
+   AF -->|Every 30 min| AR\[Athena Refresh]
+
+
+   H -->|Kafka, Spark, PostgreSQL| MON\[data/monitoring<br/>JSON + log]
+
+
+   S -.->|Optional export| BQ\[Google BigQuery<br/>realtime\_pipeline]
 
    M -.->|Optional export| BQ
 
 ```
 
-## Pipeline Flow
 
-1. A Python producer publishes JSON stock-price events to the Kafka topic `pipeline-events`.
+\## Pipeline Flow
 
-2. Spark Structured Streaming consumes Kafka micro-batches every 10 seconds.
 
-3. Each batch is retained in the raw Parquet layer for traceability.
+1\. A Python producer publishes JSON stock-price events to the Kafka topic `pipeline-events`.
 
-4. Spark validates required fields: a non-empty `symbol`, a positive numeric `price`, and `event_time`.
+2\. Spark Structured Streaming consumes Kafka micro-batches every 10 seconds.
 
-5. Valid events are deduplicated using Kafka topic, partition, and offset, then written to partitioned clean Parquet data.
+3\. Each batch is retained in the raw Parquet layer for traceability.
 
-6. Invalid events are retained in the quarantine layer with a validation-error reason.
+4\. Spark validates required fields: a non-empty `symbol`, a positive numeric `price`, and `event\_time`.
 
-7. Spark writes batch-level raw, clean, and quarantine counts to the metrics layer.
+5\. Valid events are deduplicated using Kafka topic, partition, and offset, then written to partitioned clean Parquet data.
 
-8. A Spark analytics job creates daily stock-price summaries by event date, symbol, and source.
+6\. Invalid events are retained in the quarantine layer with a validation-error reason.
 
-9. Analytics Parquet is synchronized to Amazon S3 and queried through Athena.
+7\. Spark writes batch-level raw, clean, and quarantine counts to the metrics layer.
 
-10. Airflow schedules data-quality checks, health checks, and Athena-refresh work.
+8\. A Spark analytics job creates daily stock-price summaries by event date, symbol, and source.
 
-11. The Streamlit dashboard reads the latest analytics partition and pipeline-health status.
+9\. Analytics Parquet is synchronized to Amazon S3 and queried through Athena.
 
-12. The Pipeline Analytics Assistant answers allowlisted natural-language questions about pipeline output and stock-price summaries.
+10\. Airflow schedules data-quality checks, health checks, and Athena-refresh work.
 
-## Tech Stack
+11\. The Streamlit dashboard reads the latest analytics partition and pipeline-health status.
+
+12\. The Pipeline Analytics Assistant answers allowlisted natural-language questions about pipeline output and stock-price summaries.
+
+
+\## Tech Stack
+
 
 | Layer | Technology | Purpose |
 
@@ -106,75 +164,89 @@ flowchart TB
 
 | Optional warehouse export | Google BigQuery | Optional secondary export path for events and metrics |
 
-## Data Layers
+
+\## Data Layers
+
 
 | Layer | Location | Purpose |
 
 |---|---|---|
 
-| Raw | `data/raw/stock_prices` | Immutable record of ingested Kafka payloads and ingestion metadata |
+| Raw | `data/raw/stock\_prices` | Immutable record of ingested Kafka payloads and ingestion metadata |
 
-| Clean | `data/clean/stock_prices` | Validated and deduplicated stock-price events, partitioned by `event_date` |
+| Clean | `data/clean/stock\_prices` | Validated and deduplicated stock-price events, partitioned by `event\_date` |
 
-| Quarantine | `data/quarantine/stock_prices` | Rejected events with validation-error context |
+| Quarantine | `data/quarantine/stock\_prices` | Rejected events with validation-error context |
 
-| Metrics | `data/metrics/stream_batches` | Per-micro-batch raw, clean, and quarantine counts |
+| Metrics | `data/metrics/stream\_batches` | Per-micro-batch raw, clean, and quarantine counts |
 
-| Analytics | `data/analytics/stock_price_summary` | Daily summary by event date, symbol, and source |
+| Analytics | `data/analytics/stock\_price\_summary` | Daily stock-price summary by date, symbol, and source |
 
 | Monitoring | `data/monitoring` | Current pipeline-health JSON and append-only health history |
 
-## Analytics Model
+
+\## Analytics Model
+
 
 The Spark analytics job produces daily stock-price summaries grouped by:
 
+
 ```text
 
-event_date, symbol, source
+event\_date, symbol, source
 
 ```
+
 
 Each summary contains:
 
+
 ```text
 
-tick_count
+tick\_count
 
-min_price
+min\_price
 
-max_price
+max\_price
 
-avg_price
+avg\_price
 
-latest_price
+latest\_price
 
-first_event_time
+first\_event\_time
 
-last_event_time
+last\_event\_time
 
-processed_at
+processed\_at
 
 ```
 
-The analytics dataset is partitioned by `event_date`, supporting incremental and partition-aware cloud queries.
 
-## Run Locally
+The analytics dataset is partitioned by `event\_date`, supporting incremental and partition-aware cloud queries.
 
-### Prerequisites
 
-- Docker Desktop with Docker Compose
+\## Run Locally
 
-- Python, if you want to run local helper scripts
 
-- AWS credentials configured only when using S3/Athena features
+\### Prerequisites
 
-- An OpenAI API key in `.env` for the Pipeline Analytics Assistant
 
-- A local `.env` file containing your configuration; do not commit this file
+\- Docker Desktop with Docker Compose
 
-### 1. Start the stack
+\- Python, if you want to run local helper scripts
+
+\- AWS credentials configured only when using S3/Athena features
+
+\- An OpenAI API key in `.env` for the Pipeline Analytics Assistant
+
+\- A local `.env` file containing your configuration; do not commit this file
+
+
+\### 1. Start the stack
+
 
 From the repository root:
+
 
 ```powershell
 
@@ -182,7 +254,9 @@ docker compose up -d
 
 ```
 
+
 Check service status:
+
 
 ```powershell
 
@@ -190,7 +264,9 @@ docker compose ps
 
 ```
 
+
 Expected core services include:
+
 
 ```text
 
@@ -212,21 +288,28 @@ pipeline-dashboard
 
 ```
 
-### 2. Start the streaming job
+
+\### 2. Start the streaming job
+
 
 Use the project helper script:
 
+
 ```powershell
 
-.\\start_stream.ps1
+.\\start\_stream.ps1
 
 ```
 
+
 The streaming job reads Kafka events and writes raw, clean, quarantine, metrics, and checkpoint data under `data/`.
 
-### 3. Build the analytics layer
+
+\### 3. Build the analytics layer
+
 
 After clean events exist, submit the analytics job:
+
 
 ```powershell
 
@@ -234,11 +317,13 @@ docker exec -it spark-master /opt/spark/bin/spark-submit `
 
  --master spark://spark-master:7077 `
 
- /opt/spark-apps/build_analytics_layer.py
+ /opt/spark-apps/build\_analytics\_layer.py
 
 ```
 
-### 4. Open local interfaces
+
+\### 4. Open local interfaces
+
 
 | Service | Local URL |
 
@@ -250,19 +335,24 @@ docker exec -it spark-master /opt/spark/bin/spark-submit `
 
 | Streamlit dashboard | `http://localhost:8501` |
 
-### 5. Verify monitoring
 
-Trigger `pipeline_health_check` in Airflow, or wait for its five-minute schedule. Then inspect:
+\### 5. Verify monitoring
+
+
+Trigger `pipeline\_health\_check` in Airflow, or wait for its five-minute schedule. Then inspect:
+
 
 ```powershell
 
-Get-Content .\\data\\monitoring\\pipeline_status.json
+Get-Content .\\data\\monitoring\\pipeline\_status.json
 
-Get-Content .\\data\\monitoring\\pipeline_health.log -Tail 5
+Get-Content .\\data\\monitoring\\pipeline\_health.log -Tail 5
 
 ```
 
+
 A healthy result includes:
+
 
 ```json
 
@@ -270,67 +360,88 @@ A healthy result includes:
 
  "status": "healthy",
 
- "errors_seen": []
+ "errors\_seen": \[]
 
 }
 
 ```
 
-## Pipeline Evidence
 
-### Active Spark Structured Streaming Job
+\## Pipeline Evidence
+
+
+\### Active Spark Structured Streaming Job
+
 
 The Spark Master UI shows the active `kafka-to-parquet-stream` application consuming events from Kafka with a live worker and allocated executor resources.
 
-![Spark Master UI showing the active kafka-to-parquet-stream Structured Streaming application](images/spark-streaming-job.png)
 
-### Data-Quality Quarantine Handling
+!\[Spark Master UI showing the active kafka-to-parquet-stream Structured Streaming application](images/spark-streaming-job.png)
+
+
+\### Data-Quality Quarantine Handling
+
 
 Spark validates every incoming stock-price event before it reaches the clean layer. Records that fail validation are retained in the quarantine Parquet layer with their validation reason and quarantine timestamp instead of being silently dropped.
 
-The example below shows an intentionally invalid `AAPL` event with `price = -25.5` routed to quarantine with `validation_error = non_positive_price`.
 
-![Spark Shell query showing an invalid negative-price AAPL event retained in the quarantine Parquet layer](images/quarantine-negative-price.png)
+The example below shows an intentionally invalid `AAPL` event with `price = -25.5` routed to quarantine with `validation\_error = non\_positive\_price`.
 
-### Airflow Orchestration
+
+!\[Spark Shell query showing an invalid negative-price AAPL event retained in the quarantine Parquet layer](images/quarantine-negative-price.png)
+
+
+\### Airflow Orchestration
+
 
 Airflow schedules data-quality and pipeline-health checks every five minutes and refreshes Athena analytics every 30 minutes.
+
 
 | DAG | Schedule | Responsibility |
 
 |---|---|---|
 
-| `pipeline_data_quality_check` | Every 5 minutes | Validates pipeline data-quality expectations |
+| `pipeline\_data\_quality\_check` | Every 5 minutes | Validates pipeline data-quality expectations |
 
-| `pipeline_health_check` | Every 5 minutes | Verifies Kafka, Spark Master, and PostgreSQL connectivity |
+| `pipeline\_health\_check` | Every 5 minutes | Verifies Kafka, Spark Master, and PostgreSQL connectivity |
 
-| `refresh_athena_analytics` | Every 30 minutes | Refreshes the Athena analytics view |
+| `refresh\_athena\_analytics` | Every 30 minutes | Refreshes the Athena analytics view |
 
-![Airflow DAGs showing successful data quality, health check, and Athena refresh workflows](images/airflow-dags-success.png)
+
+!\[Airflow DAGs showing successful data quality, health check, and Athena refresh workflows](images/airflow-dags-success.png)
+
 
 Each Airflow task retries once after one minute. The health-check DAG writes operational artifacts to:
+
 
 ```text
 
 data/monitoring/
 
-├── pipeline_status.json
+├── pipeline\_status.json
 
-└── pipeline_health.log
+└── pipeline\_health.log
 
 ```
 
-`pipeline_status.json` contains the latest machine-readable health snapshot, while `pipeline_health.log` maintains append-only execution history.
 
-For operational details, see [MONITORING.md](MONITORING.md) and [RUNBOOK.md](RUNBOOK.md).
+`pipeline\_status.json` contains the latest machine-readable health snapshot, while `pipeline\_health.log` maintains append-only execution history.
 
-### Amazon Athena Analytics
 
-Analytics Parquet data is synchronized to Amazon S3 and queried through the `v_latest_stock_price_summary` Athena view.
+For operational details, see \[MONITORING.md](MONITORING.md) and \[RUNBOOK.md](RUNBOOK.md).
 
-![Amazon Athena query results showing latest stock-price summary metrics from S3-backed Parquet data](images/athena-query-results.png)
+
+\### Amazon Athena Analytics
+
+
+Analytics Parquet data is synchronized to Amazon S3 and queried through the `v\_latest\_stock\_price\_summary` Athena view.
+
+
+!\[Amazon Athena query results showing latest stock-price summary metrics from S3-backed Parquet data](images/athena-query-results.png)
+
 
 The primary cloud analytics workflow is:
+
 
 ```text
 
@@ -338,23 +449,31 @@ Clean Parquet → Analytics Parquet → Amazon S3 → Amazon Athena
 
 ```
 
+
 Use the included helper to synchronize local analytics data:
+
 
 ```powershell
 
-.\\sync_to_s3.ps1
+.\\sync\_to\_s3.ps1
 
 ```
 
+
 AWS credentials and bucket details remain in local configuration and are never committed.
 
-## Pipeline Analytics Assistant
 
-The dashboard includes a read-only natural-language assistant for pipeline health and stock-price analytics. It reads the same analytics Parquet output used by the dashboard.
+\## Pipeline Analytics Assistant
 
-The assistant uses allowlisted query patterns. It cannot modify data, control services, run arbitrary SQL, or provide financial advice.
+
+The dashboard includes a guarded natural-language assistant for pipeline health and stock-price analytics. It reads the same analytics Parquet output used by the dashboard.
+
+
+The assistant uses allowlisted query patterns. It is intentionally read-only: it cannot modify data, control services, run arbitrary SQL, or provide financial advice.
+
 
 Supported questions include:
+
 
 ```text
 
@@ -368,11 +487,15 @@ Give me AAPL summary for 2026-09-15
 
 ```
 
-![Pipeline Analytics Assistant returning latest prices for AAPL, MSFT, and NVDA](images/pipeline-analytics-assistant.png)
 
-## Validation and Testing
+!\[Pipeline Analytics Assistant returning latest prices for AAPL, MSFT, and NVDA](images/pipeline-analytics-assistant.png)
+
+
+\## Validation and Testing
+
 
 Run Python tests from the repository root:
+
 
 ```powershell
 
@@ -380,7 +503,9 @@ python -m pytest tests -v
 
 ```
 
+
 Run the Spark smoke test:
+
 
 ```powershell
 
@@ -388,91 +513,113 @@ docker exec -it spark-master /opt/spark/bin/spark-submit `
 
  --master spark://spark-master:7077 `
 
- /opt/spark-apps/smoke_test.py
+ /opt/spark-apps/smoke\_test.py
 
 ```
 
+
 Operational validation checklist:
 
-- Docker services are running: `docker compose ps`
 
-- Spark Structured Streaming is active and writing data
+\- Docker services are running: `docker compose ps`
 
-- Raw, clean, quarantine, metrics, and analytics layers exist under `data/`
+\- Spark Structured Streaming is active and writing data
 
-- Invalid records include an explicit rejection reason in quarantine Parquet
+\- Raw, clean, quarantine, metrics, and analytics layers exist under `data/`
 
-- Airflow health-check and data-quality DAGs complete successfully
+\- Invalid records include an explicit rejection reason in quarantine Parquet
 
-- `data/monitoring/pipeline_status.json` reports `healthy`
+\- Airflow health-check and data-quality DAGs complete successfully
 
-- Athena queries the S3-backed analytics table or view
+\- `data/monitoring/pipeline\_status.json` reports `healthy`
 
-- The Streamlit dashboard renders the latest analytics output
+\- Athena queries the S3-backed analytics table or view
 
-- The Pipeline Analytics Assistant answers allowlisted questions only
+\- The Streamlit dashboard renders the latest analytics output
 
-## Optional Google BigQuery Export
+\- The Pipeline Analytics Assistant answers allowlisted questions only
 
-The `gcp/` directory contains optional utilities that export pipeline events and streaming metrics to a Google BigQuery dataset named `realtime_pipeline`.
+
+\## Optional Google BigQuery Export
+
+
+> \*\*Optional extension:\*\* BigQuery export and Looker Studio demonstrate a secondary warehouse/reporting path. The validated primary analytics workflow is Analytics Parquet → Amazon S3 → Amazon Athena → Streamlit.
+
+
+The `gcp/` directory contains optional utilities that export pipeline events and streaming metrics to a Google BigQuery dataset named `realtime\_pipeline`.
+
 
 | Script | Source | BigQuery table |
 
 |---|---|---|
 
-| `gcp/export_events_to_bigquery.py` | Pipeline events | `realtime_pipeline.events` |
+| `gcp/export\_events\_to\_bigquery.py` | Pipeline events | `realtime\_pipeline.events` |
 
-| `gcp/export_metrics_to_bigquery.py` | Streaming metrics | `realtime_pipeline.metrics` |
+| `gcp/export\_metrics\_to\_bigquery.py` | Streaming metrics | `realtime\_pipeline.metrics` |
 
-This is an optional secondary warehouse path. It is not required to run the primary local stock-price streaming pipeline, which uses Amazon S3 and Athena as its validated analytics path.
 
-### BigQuery Event Export
+\### BigQuery Event Export
 
-The optional event export loads pipeline event records into `realtime_pipeline.events` for cloud-warehouse analysis.
 
-![BigQuery query results showing optional exported pipeline event records](images/bigquery-events.png)
+The optional event export loads pipeline event records into `realtime\_pipeline.events` for cloud-warehouse analysis.
 
-### BigQuery Metrics Export
 
-The optional metrics export loads source-level event counts and revenue metrics into `realtime_pipeline.source_metrics`.
+!\[BigQuery query results showing optional exported pipeline event records](images/bigquery-events.png)
 
-![BigQuery query results showing optional exported pipeline source metrics](images/bigquery-metrics.png)
 
-### Optional Looker Studio Exploration
+\### BigQuery Metrics Export
+
+
+The optional metrics export loads source-level event counts and revenue metrics into `realtime\_pipeline.source\_metrics`.
+
+
+!\[BigQuery query results showing optional exported pipeline source metrics](images/bigquery-metrics.png)
+
+
+\### Optional Looker Studio Exploration
+
 
 A Looker Studio dashboard can visualize the optional BigQuery export path.
 
-![Looker Studio dashboard using the optional BigQuery export dataset](images/looker-studio-dashboard.png)
 
-See [gcp/README.md](gcp/README.md) for requirements and usage.
+!\[Looker Studio dashboard using the optional BigQuery export dataset](images/looker-studio-dashboard.png)
 
-## Engineering Decisions
 
-- **Layered Parquet storage:** Raw, clean, quarantine, metrics, and analytics layers preserve traceability while separating valid events from rejected data.
+See \[gcp/README.md](gcp/README.md) for requirements and usage.
 
-- **Kafka-offset deduplication:** Kafka topic, partition, and offset provide a stable event identity within the stream.
 
-- **Partitioned analytics:** Clean and analytics data are partitioned by event date for efficient incremental processing and cloud queries.
+\## Engineering Decisions
 
-- **Quarantine instead of silent drops:** Invalid events are preserved with explicit error reasons.
 
-- **Independent orchestration:** Airflow manages data quality, infrastructure health, and Athena refresh as separate workflows.
+\- \*\*Layered Parquet storage:\*\* Raw, clean, quarantine, metrics, and analytics layers preserve traceability while separating valid events from rejected data.
 
-- **Retry logic:** Airflow tasks retry once after one minute to handle transient service failures.
+\- \*\*Kafka-offset deduplication:\*\* Kafka topic, partition, and offset provide a stable event identity within the stream.
 
-- **Machine-readable monitoring:** The health DAG produces a current JSON status file and append-only health log.
+\- \*\*Partitioned analytics:\*\* Clean and analytics data are partitioned by event date for efficient incremental processing and cloud queries.
 
-- **Read-only AI assistant:** The analytics assistant uses allowlisted queries and cannot modify data, execute arbitrary SQL, or operate infrastructure.
+\- \*\*Quarantine instead of silent drops:\*\* Invalid events are preserved with explicit error reasons.
 
-- **Local-first reproducibility:** Docker Compose runs the full local stack, while S3/Athena provides the primary cloud analytics path.
+\- \*\*Independent orchestration:\*\* Airflow manages data quality, infrastructure health, and Athena refresh as separate workflows.
 
-- **Optional BigQuery support:** BigQuery export utilities are isolated as a secondary integration rather than presented as a required part of the primary architecture.
+\- \*\*Retry logic:\*\* Airflow tasks retry once after one minute to handle transient service failures.
 
-## Additional Screenshots
+\- \*\*Machine-readable monitoring:\*\* The health DAG produces a current JSON status file and append-only health log.
 
-The repository retains additional implementation and validation screenshots in the [`images/`](images/) directory, including Airflow cluster activity and Cassandra validation artifacts from supporting or exploratory work.
+\- \*\*Guarded AI assistant:\*\* The assistant uses allowlisted queries and cannot modify data, execute arbitrary SQL, or operate infrastructure.
 
-## Project Structure
+\- \*\*Local-first reproducibility:\*\* Docker Compose runs the full local stack, while S3/Athena provides the primary cloud analytics path.
+
+\- \*\*Optional BigQuery support:\*\* BigQuery export utilities are isolated as a secondary integration rather than presented as a required part of the primary architecture.
+
+
+\## Additional Screenshots
+
+
+The repository retains additional implementation and validation screenshots in the \[`images/`](images/) directory, including Airflow cluster activity and Cassandra validation artifacts from supporting or exploratory work.
+
+
+\## Project Structure
+
 
 ```text
 
@@ -482,11 +629,11 @@ Real-Time-Data-Engineering-Pipeline/
 
 │   └── dags/
 
-│       ├── pipeline_data_quality_check.py
+│       ├── pipeline\_data\_quality\_check.py
 
-│       ├── pipeline_health_check.py
+│       ├── pipeline\_health\_check.py
 
-│       └── refresh_athena_analytics.py
+│       └── refresh\_athena\_analytics.py
 
 ├── dashboard/
 
@@ -494,7 +641,7 @@ Real-Time-Data-Engineering-Pipeline/
 
 │   └── pages/
 
-│       └── 1_Pipeline_Analytics_Assistant.py
+│       └── 1\_Pipeline\_Analytics\_Assistant.py
 
 ├── data/
 
@@ -506,17 +653,17 @@ Real-Time-Data-Engineering-Pipeline/
 
 │   ├── README.md
 
-│   ├── export_events_to_bigquery.py
+│   ├── export\_events\_to\_bigquery.py
 
-│   └── export_metrics_to_bigquery.py
+│   └── export\_metrics\_to\_bigquery.py
 
 ├── images/
 
 ├── llm/
 
-│   ├── __init__.py
+│   ├── \_\_init\_\_.py
 
-│   ├── analytics_backend.py
+│   ├── analytics\_backend.py
 
 │   ├── assistant.py
 
@@ -526,17 +673,17 @@ Real-Time-Data-Engineering-Pipeline/
 
 │   ├── requirements.txt
 
-│   └── stock_producer.py
+│   └── stock\_producer.py
 
 ├── spark/
 
 │   └── jobs/
 
-│       ├── build_analytics_layer.py
+│       ├── build\_analytics\_layer.py
 
-│       ├── kafka_stream.py
+│       ├── kafka\_stream.py
 
-│       └── smoke_test.py
+│       └── smoke\_test.py
 
 ├── tests/
 
@@ -552,15 +699,17 @@ Real-Time-Data-Engineering-Pipeline/
 
 ├── RUNBOOK.md
 
-├── run_health_check.ps1
+├── run\_health\_check.ps1
 
-├── start_stream.ps1
+├── start\_stream.ps1
 
-└── sync_to_s3.ps1
+└── sync\_to\_s3.ps1
 
 ```
 
-## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+\## License
+
+
+This project is licensed under the MIT License. See \[LICENSE](LICENSE).
 
