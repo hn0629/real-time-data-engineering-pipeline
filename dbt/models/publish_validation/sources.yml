@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: clean_publish_validation
+    description: "Isolated validation source for current-format Clean Parquet."
+    database: awsdatacatalog
+    schema: "{{ env_var('ATHENA_DATABASE') }}"
+    config:
+      enabled: "{{ var('enable_clean_publish_validation', false) }}"
+    tables:
+      - name: stock_prices
+        identifier: "{{ var('clean_publish_validation_table', 'clean_stock_prices_publish_test_632bce19') }}"

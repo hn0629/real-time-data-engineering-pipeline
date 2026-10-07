@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: stg_clean_publish_validation
+    description: >
+      Opt-in validation view over current-format Clean data.
+      Event timestamps are normalized to UTC.
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: price
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: source
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: event_time
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: processed_at
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: event_date
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: kafka_topic
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: kafka_partition
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
+      - name: kafka_offset
+        data_tests:
+          - not_null:
+              config:
+                enabled: "{{ var('enable_clean_publish_validation', false) }}"
