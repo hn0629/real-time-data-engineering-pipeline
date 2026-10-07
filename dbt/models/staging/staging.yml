@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: stg_stock_prices
+    description: >
+      Stock-price events from the Clean layer, with normalized ticker symbols
+      and retained Kafka metadata for event traceability.
+    columns:
+      - name: kafka_topic
+        description: "Kafka topic from which the event was consumed."
+
+      - name: kafka_partition
+        description: "Kafka partition containing the event."
+
+      - name: kafka_offset
+        description: "Event offset within the Kafka topic and partition."
+
+      - name: symbol
+        description: "Ticker symbol normalized to uppercase with whitespace removed."
+        data_tests:
+          - not_null
+
+      - name: price
+        description: "Price reported by the event source."
+        data_tests:
+          - not_null
+
+      - name: source
+        description: "Origin of the stock-price event."
+        data_tests:
+          - not_null
+
+      - name: event_time
+        description: "Timestamp of the source event."
+        data_tests:
+          - not_null
+
+      - name: processed_at
+        description: "Processing timestamp recorded by the streaming pipeline."
+
+      - name: event_date
+        description: "Existing date partition field."
+
+      - name: event_hour
+        description: "Existing hour partition field."

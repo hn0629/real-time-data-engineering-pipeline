@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import boto3
 from airflow import DAG
+from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
 
@@ -170,4 +171,26 @@ with DAG(
         python_callable=update_latest_metrics_view,
     )
 
-    refresh_task >> update_view_task
+    dbt_build_task = BashOperator(
+        task_id="dbt_build_analytics",
+        bash_command=(
+            "exec /opt/dbt-venv/bin/dbt build "
+            "--project-dir /opt/airflow/dbt "
+            "--profiles-dir /opt/airflow/dbt/profiles"
+        ),
+        env={
+            "DBT_TARGET_PATH": (
+                "/tmp/dbt-target/{{ dag.dag_id }}/"
+                "{{ ts_nodash }}/{{ ti.try_number }}"
+            ),
+            "DBT_LOG_PATH": (
+                "/opt/airflow/logs/dbt/{{ dag.dag_id }}/"
+                "{{ ts_nodash }}/{{ ti.try_number }}"
+            ),
+        },
+        append_env=True,
+        skip_on_exit_code=None,
+        execution_timeout=timedelta(minutes=10),
+    )
+
+    refresh_task >> update_view_task >> dbt_build_task

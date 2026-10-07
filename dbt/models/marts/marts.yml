@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: mart_latest_symbol_metrics
+    description: >
+      Latest available daily metrics for each symbol and source.
+      Each pair can have a different latest date. This model does not
+      imply that the data is current or represents a complete trading session.
+    columns:
+      - name: event_date
+        description: "Latest available event date for this symbol-source pair."
+        data_tests:
+          - not_null
+
+      - name: symbol
+        description: "Normalized stock ticker symbol."
+        data_tests:
+          - not_null
+
+      - name: source
+        description: "Origin of the stock-price events."
+        data_tests:
+          - not_null
+
+      - name: event_count
+        description: "Captured event count for the selected date."
+        data_tests:
+          - not_null
+
+      - name: average_price
+        description: "Average price across captured events for the selected date."
+
+      - name: minimum_price
+        description: "Minimum captured price for the selected date."
+
+      - name: maximum_price
+        description: "Maximum captured price for the selected date."
+
+      - name: latest_event_time
+        description: "Latest event timestamp contributing to this summary."
+        data_tests:
+          - not_null
