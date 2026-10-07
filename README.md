@@ -8,12 +8,14 @@ This project models a financial data monitoring system where analysts require ti
 
 ![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
 
+The cloud analytics layer is extended with dbt on Amazon Athena: three SQL models and 14 automated data-quality tests produce a latest-available stock metrics mart. Airflow orchestrates the dbt build, and a dedicated Streamlit page queries the mart. The original dashboard and guarded LLM assistant continue to read local Analytics Parquet.
+
 ## Key Features
 
 - **Real-time streaming:** Kafka ingests stock-price ticks and Spark Structured Streaming processes micro-batches every 10 seconds.
 - **Data-quality controls:** Required-field validation, Kafka-offset deduplication, and a quarantine layer retain invalid events with explicit rejection reasons.
-- **Cloud analytics:** Curated analytics Parquet is synchronized to Amazon S3 and queried through Amazon Athena.
-- **Operational workflows:** Airflow schedules data-quality checks, service-health checks, retries, and Athena-refresh work.
+- **Cloud analytics:** Amazon Athena queries S3-backed Parquet data; dbt models validated stock events into staging, daily metrics, and a latest-available mart.
+- **Operational workflows:** Airflow schedules data-quality and service-health checks, creates Athena snapshots, and executes dbt models and tests.
 - **Analytics experience:** A Streamlit dashboard exposes current pipeline health, latest prices, summary metrics, and visual analytics.
 - **Natural-language analytics:** An LLM-powered assistant translates supported business questions into safe, read-only analytics lookups over curated pipeline output.
 
@@ -39,30 +41,37 @@ For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 flowchart TB
-    P[Stock Price Producer<br/>Python] -->|JSON stock ticks| K[Apache Kafka<br/>pipeline-events]
+    P[Python simulated stock producer] --> K[Apache Kafka]
+    K --> S[Spark Structured Streaming]
+    S --> R[Raw Parquet]
+    S --> C[Clean Parquet]
+    S --> Q[Quarantine Parquet]
+    S --> M[Batch metrics]
 
-    K -->|Structured Streaming| S[Apache Spark<br/>validates and deduplicates]
+    C --> A[Spark batch analytics Parquet]
+    A --> D[Original Streamlit dashboard]
+    A --> L[Read-only LLM assistant]
+    A --> SYNC[Analytics S3 sync helper]
+    SYNC --> LEGACY[Legacy S3 analytics query path]
 
-    S -->|Raw events| R[Raw Parquet<br/>data/raw/stock_prices]
-    S -->|Validated events| C[Clean Parquet<br/>data/clean/stock_prices]
-    S -->|Invalid records| Q[Quarantine Parquet<br/>data/quarantine/stock_prices]
-    S -->|Batch metrics| M[Metrics Parquet<br/>data/metrics/stream_batches]
+    CS3[Clean Parquet registered in S3] --> CT[Athena clean_stock_prices]
+    CT --> ST[dbt stg_stock_prices]
+    ST --> INT[dbt int_daily_symbol_metrics]
+    INT --> MART[dbt mart_latest_symbol_metrics]
+    MART --> PAGE[Streamlit dbt Analytics page]
 
-    C -->|Batch analytics job| A[Analytics Parquet<br/>stock_price_summary]
-    A -->|sync_to_s3.ps1| S3[Amazon S3]
-    S3 -->|Query| ATH[Amazon Athena<br/>v_latest_stock_price_summary]
+    AF[Apache Airflow] --> HC[Health checks]
+    AF --> DQ[Data-quality checks]
+    AF --> SNAP[Current-day Athena snapshot]
+    CT --> SNAP
+    SNAP --> VIEW[v_latest_daily_symbol_metrics]
+    VIEW -->|Task dependency| BUILD[dbt build: 3 models and 14 tests]
+    BUILD -.-> ST
+    HC --> STATUS[Pipeline health JSON and log]
+    STATUS --> D
 
-    A -->|Read Parquet| D[Streamlit Dashboard]
-    D -->|Natural-language queries| LLM[Pipeline Analytics Assistant<br/>LLM-powered]
-
-    AF[Apache Airflow] -->|Every 5 min| H[Health Check<br/>pipeline_status.json]
-    AF -->|Scheduled| DQ[Data Quality Check]
-    AF -->|Every 30 min| AR[Athena Refresh]
-
-    H -->|Kafka, Spark, PostgreSQL| MON[data/monitoring<br/>JSON + log]
-
-    S -.->|Optional export| BQ[Google BigQuery<br/>realtime_pipeline]
-    M -.->|Optional export| BQ
+    S -.-> BQ[Optional BigQuery export]
+    M -.-> BQ
 ```
 
 ## Pipeline Flow
@@ -238,11 +247,11 @@ Airflow schedules data-quality and pipeline-health checks every five minutes and
 |---|---|---|
 | `pipeline_data_quality_check` | Every 5 minutes | Validates pipeline data-quality expectations |
 | `pipeline_health_check` | Every 5 minutes | Verifies Kafka, Spark Master, and PostgreSQL connectivity |
-| `refresh_athena_analytics` | Every 30 minutes | Refreshes the Athena analytics view |
+| `refresh_athena_analytics` | Every 30 minutes | Creates a current-day snapshot, updates `v_latest_daily_symbol_metrics`, then builds and tests dbt views |
 
 ![Airflow DAGs showing successful data quality, health check, and Athena refresh workflows](images/airflow-dags-success.png)
 
-Each Airflow task retries once after one minute. The health-check DAG writes operational artifacts to:
+The Athena/dbt DAG permits two retries with a one-minute delay. Other DAGs use their own configured retry settings. The health-check DAG writes operational artifacts to:
 
 ```text
 data/monitoring/
@@ -321,7 +330,7 @@ Operational validation checklist:
 
 ## Optional Google BigQuery Export
 
-> **Optional extension:** BigQuery export and Looker Studio demonstrate a secondary warehouse/reporting path. The validated primary analytics workflow is Analytics Parquet → Amazon S3 → Amazon Athena → Streamlit.
+> **Optional extension:** BigQuery export and Looker Studio demonstrate a secondary warehouse/reporting path. The validated dbt cloud workflow is S3-backed Clean events → Athena → dbt views → the dedicated Streamlit dbt Analytics page. The original dashboard and assistant read local Analytics Parquet.
 
 The `gcp/` directory contains optional utilities that export pipeline events and streaming metrics to a Google BigQuery dataset named `realtime_pipeline`.
 
@@ -357,7 +366,7 @@ See [gcp/README.md](gcp/README.md) for requirements and usage.
 - **Partitioned analytics:** Clean and analytics data are partitioned by event date for efficient incremental processing and cloud queries.
 - **Quarantine instead of silent drops:** Invalid events are preserved with explicit error reasons.
 - **Independent orchestration:** Airflow manages data quality, infrastructure health, and Athena refresh as separate workflows.
-- **Retry logic:** Airflow tasks retry once after one minute to handle transient service failures.
+- **Retry logic:** The Athena/dbt DAG permits two retries with a one-minute delay; the dbt task has a ten-minute execution timeout.
 - **Machine-readable monitoring:** The health DAG produces a current JSON status file and append-only health log.
 - **Guarded AI assistant:** The assistant uses allowlisted queries and cannot modify data, execute arbitrary SQL, or operate infrastructure.
 - **Local-first reproducibility:** Docker Compose runs the full local stack, while S3/Athena provides the primary cloud analytics path.
@@ -413,6 +422,145 @@ Real-Time-Data-Engineering-Pipeline/
 └── sync_to_s3.ps1
 ```
 
+## dbt Analytics Layer
+
+![Streamlit dbt Analytics page showing five symbols, 1,497 simulated events, and visible historical event timestamps](images/dbt-analytics-dashboard.png)
+
+The dbt project queries the existing S3-backed Athena table
+`realtime_pipeline.clean_stock_prices`. It does not ingest Kafka events,
+upload local Clean files, or replace the Spark streaming job.
+
+### Models
+
+| Model | Materialization | Grain and purpose |
+|---|---|---|
+| `stg_stock_prices` | View | Event-level data with normalized symbols and retained Kafka metadata |
+| `int_daily_symbol_metrics` | View | Daily captured-event metrics by event date, symbol, and source |
+| `mart_latest_symbol_metrics` | View | Latest available daily metrics for each symbol/source pair |
+
+The mart exposes event counts, average/minimum/maximum prices, event dates,
+and the latest event timestamp. It does not expose a latest observed price
+or claim complete market-session OHLC coverage.
+
+Each symbol/source pair can have a different latest available date.
+Historical sample data is explicitly labeled; query time is not event time.
+
+### Automated tests
+
+The project contains 14 data tests:
+
+- Staging: four required-field tests and one positive-price/nonblank-symbol test.
+- Intermediate: three required-field tests.
+- Mart: five required-field tests and one symbol/source uniqueness test.
+
+A successful `dbt build` reports 17 successful resources:
+three models plus 14 tests. This does not represent 17 tests or an uptime SLA.
+
+### Airflow execution
+
+The `refresh_athena_analytics` DAG runs every 30 minutes:
+
+```text
+refresh_daily_symbol_metrics
+    → update_latest_metrics_view
+    → dbt_build_analytics
+```
+
+The first task creates a current-day Parquet snapshot from
+`clean_stock_prices`. The second updates `v_latest_daily_symbol_metrics`.
+The final task builds and tests the dbt models.
+
+The dbt source is `clean_stock_prices`, not the snapshot view.
+The dependency controls execution order; it does not make the dbt models
+read the snapshot or perform an upstream S3 sync.
+
+### Dashboard and assistant boundaries
+
+- Original Streamlit dashboard: local Analytics Parquet and pipeline-health artifacts.
+- dbt Analytics page: fixed read-only Athena query against `mart_latest_symbol_metrics`.
+- LLM assistant: existing allowlisted lookups against local Analytics Parquet.
+
+The dbt page caches results for five minutes and displays event timestamps,
+result-fetch time, and an Athena query ID.
+
+### Running dbt in Docker
+
+The custom Airflow image uses Python 3.11 and installs dbt in
+`/opt/dbt-venv`, separate from Airflow packages.
+
+Build the image before starting the stack:
+
+```powershell
+docker compose build airflow-scheduler
+docker compose up -d
+```
+
+Create the Git-ignored `dbt/profiles/profiles.yml` locally:
+
+```yaml
+stock_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      database: awsdatacatalog
+      schema: "{{ env_var('ATHENA_DATABASE') }}"
+      region_name: "{{ env_var('AWS_REGION') }}"
+      s3_staging_dir: "{{ env_var('ATHENA_OUTPUT') }}"
+      threads: 2
+```
+
+Supply AWS credentials through local configuration, never committed files.
+The AWS identity needs appropriate Athena, S3, and Glue permissions.
+
+Run the models and tests:
+
+```powershell
+docker compose exec -e DBT_LOG_PATH=/tmp/dbt-logs -e DBT_TARGET_PATH=/tmp/dbt-target airflow-scheduler /opt/dbt-venv/bin/dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
+```
+
+Generate documentation:
+
+```powershell
+docker compose exec -e DBT_LOG_PATH=/tmp/dbt-docs-logs -e DBT_TARGET_PATH=/tmp/dbt-docs airflow-scheduler /opt/dbt-venv/bin/dbt docs generate --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
+```
+
+Documentation generation was validated on October 7, 2026 and produced
+`index.html`, `manifest.json`, and `catalog.json`.
+These files are generated under `/tmp/dbt-docs` inside the scheduler
+container and are temporary; regenerate them after container replacement.
+Generated metadata may contain infrastructure identifiers and should be
+reviewed before publication.
+
+### Validated sample
+
+The October 7, 2026 validation displayed 1,497 simulated events summarized
+across five symbols: AAPL, AMZN, MSFT, NVDA, and TSLA.
+The displayed event date was September 4, 2026.
+
+These are sample-validation counts, not daily throughput, live-data
+freshness, or production-scale performance claims.
+
+### New source files
+
+```text
+airflow/Dockerfile.dbt
+dashboard/pages/1_dbt_Analytics.py
+dbt/dbt_project.yml
+dbt/models/sources.yml
+dbt/models/staging/stg_stock_prices.sql
+dbt/models/staging/staging.yml
+dbt/models/intermediate/int_daily_symbol_metrics.sql
+dbt/models/intermediate/intermediate.yml
+dbt/models/marts/mart_latest_symbol_metrics.sql
+dbt/models/marts/marts.yml
+dbt/tests/assert_stock_price_values_valid.sql
+dbt/tests/assert_latest_symbol_metrics_unique.sql
+```
+
+Local virtual environments, profiles, generated dbt artifacts, and logs
+are excluded from Git.
+
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+This project is licensed under the MIT License. See [LICENSE.txt](LICENSE.txt).

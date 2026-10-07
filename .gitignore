@@ -68,3 +68,10 @@ spark/metastore_db/
 *.crc
 spark/jobs/*.log
 spark/derby.log
+# dbt local environment, credentials, and generated files
+.venv-dbt/
+dbt/profiles/profiles.yml
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/profiles/.user.yml

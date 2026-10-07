@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: int_daily_symbol_metrics
+    description: >
+      Daily metrics for captured stock-price events, with one row per
+      event date, symbol, and source. Includes available historical dates.
+      Minimum, maximum, and average prices describe captured events,
+      not necessarily complete market-session data.
+    columns:
+      - name: event_date
+        description: "Date derived from the source event timestamp."
+        data_tests:
+          - not_null
+
+      - name: symbol
+        description: "Normalized stock ticker symbol."
+        data_tests:
+          - not_null
+
+      - name: source
+        description: "Origin of the stock-price events."
+        data_tests:
+          - not_null
+
+      - name: event_count
+        description: "Number of captured events in this date-symbol-source group."
+
+      - name: average_price
+        description: "Average price across captured events."
+
+      - name: minimum_price
+        description: "Minimum price across captured events."
+
+      - name: maximum_price
+        description: "Maximum price across captured events."
+
+      - name: latest_event_time
+        description: "Latest source event timestamp in this group."

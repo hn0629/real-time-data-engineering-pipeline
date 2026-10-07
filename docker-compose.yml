@@ -1,5 +1,8 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.7.3
+  image: realtime-airflow-dbt:2.7.3
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile.dbt
   user: "${AIRFLOW_UID:-50000}:0"
   env_file:
     - .env
@@ -14,6 +17,7 @@ x-airflow-common: &airflow-common
     _PIP_ADDITIONAL_REQUIREMENTS: "pandas==2.0.3 pyarrow==11.0.0"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
+    - ./dbt:/opt/airflow/dbt:ro
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     - ./src:/opt/airflow/src
@@ -198,7 +202,7 @@ services:
       PYTHONPATH: /app
       DATA_BASE_PATH: /opt/spark-data
     command: >
-      sh -c "pip install --no-cache-dir streamlit pandas pyarrow openai python-dotenv &&
+      sh -c "pip install --no-cache-dir streamlit pandas pyarrow openai python-dotenv boto3 &&
              streamlit run app.py --server.address=0.0.0.0 --server.port=8501"
     ports:
       - "8501:8501"

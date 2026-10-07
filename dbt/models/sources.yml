@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: stock_pipeline
+    description: "Validated stock-price events produced by the streaming pipeline."
+    database: awsdatacatalog
+    schema: "{{ env_var('ATHENA_DATABASE') }}"
+    tables:
+      - name: clean_stock_prices
+        description: "Clean stock-price events stored as partitioned Parquet in Amazon S3."

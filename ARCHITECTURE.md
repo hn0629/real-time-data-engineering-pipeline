@@ -2,74 +2,45 @@
 
 ## Overview
 
-This project implements a real-time stock-market data pipeline that ingests live price ticks through Kafka, processes them with Spark Structured Streaming, stores validated data in a layered Parquet data lake, syncs analytics output to AWS S3 for querying via Athena, and presents results through a Streamlit dashboard with an LLM-powered natural-language assistant. Apache Airflow orchestrates monitoring, data-quality checks, and Athena view refreshes. Google BigQuery is available as an optional cloud-warehouse export target.
+This project implements a real-time stock-market data pipeline that ingests simulated stock-price ticks through Kafka, processes them with Spark Structured Streaming, stores validated data in a layered Parquet data lake, syncs analytics output to AWS S3 for querying via Athena, and presents results through a Streamlit dashboard with an LLM-powered natural-language assistant. Apache Airflow orchestrates monitoring, data-quality checks, and Athena view refreshes. Google BigQuery is available as an optional cloud-warehouse export target.
 
 ---
 
 ## Architecture Diagram
 
 ```mermaid
-graph TB
-    subgraph ingestion["Data Ingestion"]
-        SP["Stock Producer<br/>Python · kafka-python"]
-        KAFKA["Apache Kafka<br/>topic: pipeline-events"]
-    end
+flowchart TB
+    P[Python simulated stock producer] --> K[Apache Kafka]
+    K --> S[Spark Structured Streaming]
+    S --> R[Raw Parquet]
+    S --> C[Clean Parquet]
+    S --> Q[Quarantine Parquet]
+    S --> M[Batch metrics]
 
-    subgraph processing["Stream Processing"]
-        SPARK["Spark Structured Streaming<br/>validates → deduplicates → writes layers"]
-        ANALYTICS_JOB["Spark Batch Analytics Job<br/>aggregates clean events → summary"]
-    end
+    C --> A[Spark batch analytics Parquet]
+    A --> D[Original Streamlit dashboard]
+    A --> L[Read-only LLM assistant]
+    A --> SYNC[Analytics S3 sync helper]
+    SYNC --> LEGACY[Legacy S3 analytics query path]
 
-    subgraph lake["Parquet Data Lake — Local + S3"]
-        RAW["Raw Layer<br/>data/raw/stock_prices"]
-        CLEAN["Clean Layer<br/>data/clean/stock_prices"]
-        QUAR["Quarantine<br/>data/quarantine/stock_prices"]
-        METRICS["Metrics<br/>data/metrics/stream_batches"]
-        ANALYTICS["Analytics Layer<br/>data/analytics/stock_price_summary"]
-    end
+    CS3[Clean Parquet registered in S3] --> CT[Athena clean_stock_prices]
+    CT --> ST[dbt stg_stock_prices]
+    ST --> INT[dbt int_daily_symbol_metrics]
+    INT --> MART[dbt mart_latest_symbol_metrics]
+    MART --> PAGE[Streamlit dbt Analytics page]
 
-    subgraph aws["AWS Cloud Warehouse"]
-        S3["Amazon S3<br/>Analytics Parquet sync"]
-        ATHENA["Amazon Athena<br/>v_latest_stock_price_summary"]
-    end
+    AF[Apache Airflow] --> HC[Health checks]
+    AF --> DQ[Data-quality checks]
+    AF --> SNAP[Current-day Athena snapshot]
+    CT --> SNAP
+    SNAP --> VIEW[v_latest_daily_symbol_metrics]
+    VIEW -->|Task dependency| BUILD[dbt build: 3 models and 14 tests]
+    BUILD -.-> ST
+    HC --> STATUS[Pipeline health JSON and log]
+    STATUS --> D
 
-    subgraph gcp_layer["GCP — Optional Cloud Export"]
-        BQ["Google BigQuery<br/>realtime_pipeline.events / .metrics"]
-    end
-
-    subgraph airflow_layer["Airflow Orchestration & Monitoring"]
-        AIRFLOW["Apache Airflow<br/>SequentialExecutor"]
-        HEALTH["Health Check DAG<br/>every 5 min"]
-        DQ["Data Quality DAG<br/>validates clean partition"]
-        REFRESH["Athena Refresh DAG<br/>every 30 min"]
-        STATUS["pipeline_status.json<br/>pipeline_health.log"]
-    end
-
-    subgraph ui["Dashboard & AI Assistant"]
-        DASH["Streamlit Dashboard<br/>reads Analytics + health status"]
-        ASSIST["Pipeline Analytics Assistant<br/>LLM natural-language queries"]
-    end
-
-    SP -->|"publish stock ticks"| KAFKA
-    KAFKA -->|"consume stream"| SPARK
-    SPARK -->|"raw events"| RAW
-    SPARK -->|"validated events"| CLEAN
-    SPARK -->|"invalid records"| QUAR
-    SPARK -->|"batch metrics"| METRICS
-    CLEAN -->|"aggregate"| ANALYTICS_JOB
-    ANALYTICS_JOB -->|"summary rows"| ANALYTICS
-    ANALYTICS -->|"sync_to_s3.ps1"| S3
-    S3 -->|"query Parquet"| ATHENA
-    AIRFLOW --> HEALTH
-    AIRFLOW --> DQ
-    AIRFLOW --> REFRESH
-    HEALTH -->|"write status"| STATUS
-    REFRESH -->|"refresh view"| ATHENA
-    STATUS -->|"read health"| DASH
-    ANALYTICS -->|"read Parquet"| DASH
-    DASH --> ASSIST
-    SPARK -.->|"export_events_to_bigquery.py"| BQ
-    METRICS -.->|"export_metrics_to_bigquery.py"| BQ
+    S -.-> BQ[Optional BigQuery export]
+    M -.-> BQ
 ```
 
 ---
@@ -107,9 +78,20 @@ A **Spark batch analytics job** reads the latest Clean partition and produces th
 - `first_event_time`, `last_event_time` — event time range
 - `processed_at` — job execution timestamp
 
-### Step 4 — AWS S3 Sync and Athena Query
+### Step 4 — AWS Analytics and dbt
 
-The `sync_to_s3.ps1` script uploads the Analytics Parquet partition to Amazon S3 under the analytics prefix. **Amazon Athena** queries this data through the view `v_latest_stock_price_summary`, which returns the most recent summary rows across all partitions. The Airflow `refresh_athena_analytics` DAG refreshes this view every 30 minutes to ensure Athena reflects the latest synced data.
+Two analytics paths coexist:
+
+1. Spark creates local Analytics Parquet consumed by the original dashboard
+   and LLM assistant. The existing S3 helper supports the analytics export path.
+2. dbt queries the registered S3-backed `clean_stock_prices` Athena table and
+   builds staging, daily metrics, and latest-available mart views. A separate
+   Streamlit page queries this mart.
+
+The Athena refresh DAG creates a unique current-day snapshot, updates
+`v_latest_daily_symbol_metrics`, and then executes `dbt build`.
+It does not refresh `v_latest_stock_price_summary`, and it does not
+perform an S3 synchronization step.
 
 ### Step 5 — Airflow Orchestration & Monitoring
 
@@ -119,7 +101,7 @@ Apache Airflow runs three DAGs that orchestrate and monitor the pipeline:
 |---|---|---|
 | `pipeline_health_check` | Every 5 minutes | Checks Kafka, Spark Master, and PostgreSQL service reachability; writes `pipeline_status.json` (current snapshot) and appends to `pipeline_health.log` (audit trail) |
 | `pipeline_data_quality_check` | Scheduled | Validates the latest Clean partition — checks row count, null prices, and schema integrity |
-| `refresh_athena_analytics` | Every 30 minutes | Refreshes the Athena `v_latest_stock_price_summary` view to reflect newly synced S3 data |
+| `refresh_athena_analytics` | Every 30 minutes | Creates a current-day snapshot, updates `v_latest_daily_symbol_metrics`, then builds and tests dbt views |
 
 **Monitoring artifacts** (written to `data/monitoring/`):
 
@@ -128,7 +110,7 @@ Apache Airflow runs three DAGs that orchestrate and monitor the pipeline:
 | `pipeline_status.json` | Machine-readable current health snapshot, overwritten on each check. Contains overall status, per-service checks (Kafka, Spark, PostgreSQL), and errors list |
 | `pipeline_health.log` | Append-only text log of every health-check result, providing an operational audit trail |
 
-**Retry logic:** Each Airflow task is configured with `retries=1` and `retry_delay=timedelta(minutes=1)`. If a task fails (e.g., Kafka is temporarily unreachable), Airflow automatically retries it once after one minute. If the retry also fails, the task is marked failed and the failure is recorded in the monitoring artifacts. This provides a balance between resilience and fast failure detection.
+Retry settings are DAG-specific. The Athena/dbt DAG permits two retries with a one-minute delay; its dbt task has a ten-minute execution timeout.
 
 ### Step 6 — Dashboard & AI Assistant
 
@@ -184,7 +166,7 @@ data/
     └── pipeline_health.log
 ```
 
-All layers are partitioned by `event_date` for efficient reads. The Raw layer preserves every consumed event for auditability. The Clean layer is the trusted source for downstream analytics. The Analytics layer provides pre-computed aggregates that power the dashboard and assistant.
+Stock-event and analytics datasets use date-based partitions; the inspected Clean Athena table also has an `event_hour` partition. Monitoring files and dbt views are not date-partitioned Parquet datasets. The Raw layer preserves every consumed event for auditability. The Clean layer is the trusted source for downstream analytics. The Analytics layer provides pre-computed aggregates that power the dashboard and assistant.
 
 ---
 
@@ -195,9 +177,9 @@ All layers are partitioned by `event_date` for efficient reads. The Raw layer pr
 | `zookeeper` | confluentinc/cp-zookeeper | Kafka coordination |
 | `broker` | confluentinc/cp-kafka | Kafka message broker |
 | `postgres` | postgres:14 | Airflow metadata database |
-| `airflow` | apache/airflow:2.7.3 | Airflow webserver |
-| `airflow-scheduler` | apache/airflow:2.7.3 | Airflow scheduler |
-| `airflow-init` | apache/airflow:2.7.3 | Airflow DB migration (one-time) |
+| `airflow` | realtime-airflow-dbt:2.7.3 | Airflow webserver |
+| `airflow-scheduler` | realtime-airflow-dbt:2.7.3 | Airflow scheduler |
+| `airflow-init` | realtime-airflow-dbt:2.7.3 | Airflow DB migration (one-time) |
 | `spark-master` | apache/spark:3.5.0 | Spark cluster master |
 | `spark-worker` | apache/spark:3.5.0 | Spark cluster worker |
 | `producer` | python:3.11-slim | Stock price event producer |
@@ -224,6 +206,10 @@ All services communicate over the `pipeline-network` Docker bridge network. Data
 | Language | Python, Scala/PySpark, SQL |
 
 ---
+
+## dbt Extension
+
+The custom Airflow image is based on apache/airflow:2.7.3-python3.11. dbt Core 1.12.5 and the Athena adapter 1.11.1 run in an isolated environment. Three Athena views and 14 tests have been validated through an Airflow task. The dedicated Streamlit dbt Analytics page reads the mart; the existing LLM assistant continues to read local Parquet. See the README dbt Analytics Layer section for model grains, configuration, commands, and limitations.
 
 ## Validation Evidence
 
