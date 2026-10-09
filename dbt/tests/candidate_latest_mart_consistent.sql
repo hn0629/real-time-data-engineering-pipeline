@@ -46,4 +46,3 @@ where
     or a.maximum_mart_event_date is null
     or a.minimum_mart_event_date <> e.expected_event_date
     or a.maximum_mart_event_date <> e.expected_event_date
-

@@ -21,4 +21,3 @@ where
     or average_price > maximum_price
     or latest_event_time is null
     or cast(latest_event_time as date) <> event_date
-
