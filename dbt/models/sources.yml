@@ -7,4 +7,8 @@ sources:
     schema: "{{ env_var('ATHENA_DATABASE') }}"
     tables:
       - name: clean_stock_prices
-        description: "Clean stock-price events stored as partitioned Parquet in Amazon S3."
+        identifier: "{{ 'clean_stock_prices_v2' if var('use_clean_stock_prices_v2', false) else 'clean_stock_prices' }}"
+        description: >
+          Clean stock-price events stored as partitioned Parquet in Amazon S3.
+          Uses the legacy table by default. The current-format v2 table is
+          selected only when use_clean_stock_prices_v2 is explicitly enabled.
