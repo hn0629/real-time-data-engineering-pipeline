@@ -155,7 +155,20 @@ Snowflake's source count was confirmed as six and its complete build passed.
 Detailed Snowflake output-value verification is not yet recorded here.
 
 Exact cross-platform output equivalence remains pending that confirmation.
-The platform-specific fixture setup scripts are not yet checked into Git.
+Platform-specific fixture setup scripts are included in the repository:
+
+- [Snowflake fixture](../dbt/fixtures/snowflake-clean-v2.sql)
+- [Databricks fixture](../dbt/fixtures/databricks-clean-v2.sql)
+
+These scripts preserve the six synthetic events used during validation.
+The saved script files have not yet been independently replay-tested.
+
+Run statements individually and stop on any error. The required development
+schemas and warehouse must already exist. CREATE TABLE intentionally fails
+if the fixture table exists; do not continue to INSERT after that error.
+
+Do not rerun the inserts against an existing fixture: they append rows.
+The scripts do not drop tables, reset data, or manage warehouse lifecycle.
 
 ## Build Selection
 
