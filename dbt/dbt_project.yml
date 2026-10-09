@@ -16,7 +16,15 @@ models:
   stock_analytics:
     staging:
       +materialized: view
+      stg_stock_prices:
+        +alias: "{{ 'stg_stock_prices_v2_candidate' if var('use_clean_stock_prices_v2', false) else 'stg_stock_prices' }}"
+
     intermediate:
       +materialized: view
+      int_daily_symbol_metrics:
+        +alias: "{{ 'int_daily_symbol_metrics_v2_candidate' if var('use_clean_stock_prices_v2', false) else 'int_daily_symbol_metrics' }}"
+
     marts:
       +materialized: view
+      mart_latest_symbol_metrics:
+        +alias: "{{ 'mart_latest_symbol_metrics_v2_candidate' if var('use_clean_stock_prices_v2', false) else 'mart_latest_symbol_metrics' }}"

@@ -78,3 +78,6 @@ dbt/profiles/.user.yml
 
 # Generated local publishing validation artifacts
 /data/publish-tests/
+
+# Local implementation backups; never commit
+/backups/
