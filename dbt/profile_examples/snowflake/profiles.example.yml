@@ -1,0 +1,18 @@
+# Local development using the password authentication tested in this project.
+# Account policy may require MFA or a different authentication method.
+# Set DBT_SOURCE_DATABASE and DBT_SOURCE_SCHEMA separately for source tables.
+stock_analytics:
+  target: snowflake_dev
+  outputs:
+    snowflake_dev:
+      type: snowflake
+      account: "{{ env_var('DBT_SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      password: "{{ env_var('DBT_ENV_SECRET_SNOWFLAKE_PASSWORD') }}"
+      authenticator: snowflake
+      role: "{{ env_var('SNOWFLAKE_ROLE') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+      schema: "{{ env_var('SNOWFLAKE_DBT_SCHEMA') }}"
+      threads: 1
+      client_session_keep_alive: false

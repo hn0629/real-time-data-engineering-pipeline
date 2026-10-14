@@ -3,8 +3,8 @@ version: 2
 sources:
   - name: stock_pipeline
     description: "Validated stock-price events produced by the streaming pipeline."
-    database: awsdatacatalog
-    schema: "{{ env_var('ATHENA_DATABASE') }}"
+    database: "{{ 'awsdatacatalog' if target.type == 'athena' else env_var('DBT_SOURCE_DATABASE') }}"
+    schema: "{{ env_var('ATHENA_DATABASE') if target.type == 'athena' else env_var('DBT_SOURCE_SCHEMA') }}"
     tables:
       - name: clean_stock_prices
         identifier: "{{ 'clean_stock_prices_v2' if var('use_clean_stock_prices_v2', false) else 'clean_stock_prices' }}"

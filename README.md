@@ -561,6 +561,49 @@ dbt/tests/assert_latest_symbol_metrics_unique.sql
 Local virtual environments, profiles, generated dbt artifacts, and logs
 are excluded from Git.
 
+## dbt Warehouse Portability
+
+The shared dbt model chain was also executed on Snowflake and Databricks
+using equivalent six-row synthetic fixtures:
+
+```text
+Clean v2 source
+    → staging
+    → daily symbol metrics
+    → latest-available symbol metrics
+```
+
+Adapter-dispatched timestamp parsing and platform-aware source mappings
+allow the same model chain to run without separate copies of the three
+transformation models.
+
+| Validation | Snowflake | Databricks |
+|---|---|---|
+| dbt Core | 1.12.5 | 1.12.5 |
+| Adapter | dbt-snowflake 1.12.1 | dbt-databricks 1.12.6 |
+| Candidate views built | 3 | 3 |
+| Data tests passed | 18 | 18 |
+| Build result | PASS=21, ERROR=0, SKIP=0 | PASS=21, ERROR=0, SKIP=0 |
+
+Runs explicitly enable `use_clean_stock_prices_v2: true` and build
+`*_v2_candidate` views. The legacy source branch remains the default.
+
+These results are separate from the earlier Athena validation described
+above. They demonstrate synthetic-fixture transformation portability,
+not live S3 integration or scheduled execution on the additional platforms.
+Detailed result-verification status and limitations are recorded in the
+validation document.
+
+- [Validation record and execution screenshots](docs/warehouse-portability-validation.md)
+- [Snowflake fixture SQL](dbt/fixtures/snowflake-clean-v2.sql)
+- [Databricks fixture SQL](dbt/fixtures/databricks-clean-v2.sql)
+- [Snowflake development profile example](dbt/profile_examples/snowflake/profiles.example.yml)
+- [Databricks interactive OAuth profile example](dbt/profile_examples/databricks/profiles.example.yml)
+
+Separate Windows/Python 3.11 dependency snapshots are available under
+`dbt/requirements/`. Saved fixture scripts have not yet been independently
+replay-tested. Both Airflow v2 DAGs remained paused during validation.
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE.txt](LICENSE.txt).
