@@ -1,0 +1,16 @@
+# Isolated Snowflake replay profile for the 2026-10-14 fixture replay.
+# Credentials and account details must remain in environment variables.
+stock_analytics:
+  target: snowflake_replay
+  outputs:
+    snowflake_replay:
+      type: snowflake
+      account: "<your-snowflake-account-identifier>"
+      user: "<your-snowflake-username>"
+      authenticator: externalbrowser
+      role: "<your-snowflake-role>"
+      warehouse: "<your-snowflake-warehouse>"
+      database: "<your-snowflake-database>"
+      schema: "DBT_REPLAY_20261014"
+      threads: 1
+      client_session_keep_alive: false

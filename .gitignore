@@ -81,3 +81,9 @@ dbt/profiles/.user.yml
 
 # Local implementation backups; never commit
 /backups/
+
+# Isolated warehouse-portability replay environments and local credentials
+.venv-snowflake-replay/
+.venv-databricks-replay/
+dbt/profiles_snowflake_replay_20261014/
+dbt/profiles_databricks_replay_20261014/
