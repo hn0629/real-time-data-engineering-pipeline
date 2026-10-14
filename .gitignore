@@ -81,3 +81,5 @@ dbt/profiles/.user.yml
 
 # Local implementation backups; never commit
 /backups/
+.venv-snowflake-replay/
+dbt/profiles_replay_20261014/
