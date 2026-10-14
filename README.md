@@ -392,6 +392,21 @@ Real-Time-Data-Engineering-Pipeline/
 ├── data/
 │   └── monitoring/
 │       └── .gitkeep
+├── dbt/
+│   ├── fixtures/
+│   │   ├── snowflake-clean-v2.sql
+│   │   ├── databricks-clean-v2.sql
+│   │   ├── snowflake-clean-v2-replay-20261014.sql
+│   │   └── databricks-clean-v2-replay-20261014.sql
+│   ├── models/
+│   ├── profile_examples/
+│   │   ├── snowflake/
+│   │   └── databricks/
+│   ├── requirements/
+│   └── tests/
+├── docs/
+│   ├── warehouse-portability-validation.md
+│   └── warehouse-portability-replay-20261014.md
 ├── gcp/
 │   ├── README.md
 │   ├── export_events_to_bigquery.py
@@ -447,7 +462,7 @@ Historical sample data is explicitly labeled; query time is not event time.
 
 ### Automated tests
 
-The project contains 14 data tests:
+The original Athena validation project contains 14 data tests:
 
 - Staging: four required-field tests and one positive-price/nonblank-symbol test.
 - Intermediate: three required-field tests.
@@ -455,6 +470,10 @@ The project contains 14 data tests:
 
 A successful `dbt build` reports 17 successful resources:
 three models plus 14 tests. This does not represent 17 tests or an uptime SLA.
+
+The Clean v2 warehouse-portability replay chain contains 18 data tests.
+A successful replay build reports 21 successful resources:
+three candidate views plus 18 tests.
 
 ### Airflow execution
 
@@ -563,8 +582,13 @@ are excluded from Git.
 
 ## dbt Warehouse Portability
 
-The shared dbt model chain was also executed on Snowflake and Databricks
-using equivalent six-row synthetic fixtures:
+The original Athena validation remains the primary cloud-analytics workflow.
+The Snowflake and Databricks results demonstrate that the same dbt
+transformation logic can be replayed from equivalent synthetic fixtures on
+additional warehouses.
+
+The shared dbt model chain was executed on Snowflake and Databricks using
+equivalent six-row synthetic fixtures:
 
 ```text
 Clean v2 source
@@ -579,8 +603,8 @@ transformation models.
 
 | Validation | Snowflake | Databricks |
 |---|---|---|
-| dbt Core | 1.12.5 | 1.12.5 |
-| Adapter | dbt-snowflake 1.12.1 | dbt-databricks 1.12.6 |
+| dbt Core | 1.12.5 | 1.12.0 |
+| Adapter | dbt-snowflake 1.12.1 | dbt-databricks 1.12.4 |
 | Candidate views built | 3 | 3 |
 | Data tests passed | 18 | 18 |
 | Build result | PASS=21, ERROR=0, SKIP=0 | PASS=21, ERROR=0, SKIP=0 |
@@ -591,18 +615,26 @@ Runs explicitly enable `use_clean_stock_prices_v2: true` and build
 These results are separate from the earlier Athena validation described
 above. They demonstrate synthetic-fixture transformation portability,
 not live S3 integration or scheduled execution on the additional platforms.
-Detailed result-verification status and limitations are recorded in the
-validation document.
 
-- [Validation record and execution screenshots](docs/warehouse-portability-validation.md)
-- [Snowflake fixture SQL](dbt/fixtures/snowflake-clean-v2.sql)
-- [Databricks fixture SQL](dbt/fixtures/databricks-clean-v2.sql)
+The saved fixture scripts were independently replay-tested on October 14,
+2026 in isolated Snowflake and Databricks schemas. Both replays rebuilt the
+three Clean v2 candidate views and passed all 18 data tests. Detailed replay
+commands, fixture verification, version information, and execution screenshots
+are recorded in the replay document.
+
+- [Original validation record and execution screenshots](docs/warehouse-portability-validation.md)
+- [Independent replay record and execution screenshots](docs/warehouse-portability-replay-20261014.md)
+- [Original Snowflake fixture SQL](dbt/fixtures/snowflake-clean-v2.sql)
+- [Original Databricks fixture SQL](dbt/fixtures/databricks-clean-v2.sql)
+- [Snowflake replay fixture SQL](dbt/fixtures/snowflake-clean-v2-replay-20261014.sql)
+- [Databricks replay fixture SQL](dbt/fixtures/databricks-clean-v2-replay-20261014.sql)
 - [Snowflake development profile example](dbt/profile_examples/snowflake/profiles.example.yml)
 - [Databricks interactive OAuth profile example](dbt/profile_examples/databricks/profiles.example.yml)
+- [Snowflake replay profile example](dbt/profile_examples/snowflake/profiles.replay-20261014.example.yml)
 
 Separate Windows/Python 3.11 dependency snapshots are available under
-`dbt/requirements/`. Saved fixture scripts have not yet been independently
-replay-tested. Both Airflow v2 DAGs remained paused during validation.
+`dbt/requirements/`. Both Airflow v2 DAGs remained paused during the original
+validation and replay work.
 
 ## License
 
