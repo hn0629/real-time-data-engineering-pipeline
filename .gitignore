@@ -87,3 +87,6 @@ dbt/profiles/.user.yml
 .venv-databricks-replay/
 dbt/profiles_snowflake_replay_20261014/
 dbt/profiles_databricks_replay_20261014/
+
+# Local cross-engine query exports
+/tests/cross_engine/local_exports/
