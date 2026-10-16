@@ -1,0 +1,15 @@
+﻿stock_analytics:
+  target: snowflake_live_s3_replay
+  outputs:
+    snowflake_live_s3_replay:
+      type: snowflake
+      account: "LAFEJVS-UT30871"
+      user: "HNGUYEN0629"
+      authenticator: snowflake
+      password: "{{ env_var('DBT_ENV_SECRET_SNOWFLAKE_PASSWORD') }}"
+      role: "SYSADMIN"
+      warehouse: "STOCK_DBT_DEV_WH"
+      database: "STOCK_PIPELINE_DEV"
+      schema: "DBT_LIVE_S3_REPLAY_20261015"
+      threads: 1
+      client_session_keep_alive: false
