@@ -1,0 +1,35 @@
+name: Clean v2 comparison tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/cross_engine/**"
+      - ".github/workflows/clean-v2-comparison-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/cross_engine/**"
+      - ".github/workflows/clean-v2-comparison-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comparison-unit-tests:
+    name: Run synthetic CSV comparison tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run comparison unit tests
+        run: python tests/cross_engine/test_compare_exports.py
