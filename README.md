@@ -497,7 +497,16 @@ Real-Time-Data-Engineering-Pipeline/
 └── sync_to_s3.ps1
 ```
 
-Local virtual environments, active credential profiles, generated dbt artifacts, and logs are excluded from Git. The local replay profile directory used in the commands below is intentionally omitted from the tracked project structure.
+Local virtual environments, secret-bearing configuration, generated dbt
+artifacts, and logs should remain outside version control.
+
+The Snowflake S3 replay profile is an environment-specific configuration
+record. It references its password through
+`DBT_ENV_SECRET_SNOWFLAKE_PASSWORD` rather than storing the password
+directly. Account and user identifiers remain in that profile.
+
+The active local Databricks replay profile is omitted from the tracked
+project structure.
 
 ## dbt Analytics Layer
 
