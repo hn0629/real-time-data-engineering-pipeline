@@ -67,4 +67,14 @@ dbt build `
 |---|---|---|
 | Athena | Live S3-backed Parquet source | PASS=21 |
 | Snowflake | S3-loaded replay table | PASS=21 |
-| Databricks | Synthetic six-row fixture replay | PASS=21 |
+| Databricks | Unity Catalog external Parquet table over the published S3 snapshot | Model run PASS=3; data tests PASS=18 |
+The Databricks direct S3 snapshot replay was completed on October 16,
+2026, after the Snowflake validation recorded here. It is separate
+from the earlier six-row synthetic-fixture replay.
+
+For the Athena and Snowflake combined builds, PASS=21 represents
+three model builds plus 18 data tests, not 21 tests. Databricks ran
+the model build and tests separately.
+
+These successful validations do not establish automated row-level
+or aggregate parity across warehouses.
