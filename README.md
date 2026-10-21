@@ -1,49 +1,92 @@
 # AI-Assisted Real-Time Stock Analytics Platform
 
-A production-oriented real-time data platform that ingests simulated stock-price events using Apache Kafka, processes and validates streaming data with Spark Structured Streaming, and delivers analytics-ready datasets to Amazon S3 and Athena.
+A real-time data platform built with Apache Kafka, Spark Structured Streaming, and AWS, extended with a shared dbt transformation layer validated on Athena, Snowflake, and Databricks.
 
-The platform provides a Streamlit dashboard and an LLM-powered natural-language analytics assistant, enabling analysts to explore curated market data without writing SQL. It includes layered Parquet storage, data-quality validation with quarantine handling, Airflow orchestration, health monitoring, and reproducible Docker-based deployment.
+The platform ingests simulated stock-price events, validates and processes streaming data, retains rejected records for inspection, and produces analytics-ready Parquet datasets. Airflow coordinates operational checks and the Athena/dbt workflow. Streamlit provides dashboard access, while a guarded LLM assistant answers supported questions over curated local analytics.
 
-This project models a financial data-monitoring system where analysts require timely, reliable insights, pipeline observability, and controlled access to curated analytics.
+Warehouse compatibility is demonstrated through synthetic fixtures and S3-backed replay workflows. Additional tooling compares exported final-mart results across three engines, with synthetic-input unit tests run in GitHub Actions.
 
-![Streamlit dashboard showing real-time stock-price analytics and pipeline health](images/dashboard-overview.png)
+![Streamlit dashboard showing stock-price analytics and pipeline health](images/dashboard-overview.png)
 
-The primary cloud analytics layer uses dbt on Amazon Athena: three SQL models and 14 automated data-quality tests produce a latest-available stock metrics mart. Airflow orchestrates the dbt build, and a dedicated Streamlit page queries the mart. The original dashboard and guarded LLM assistant continue to read local Analytics Parquet.
+## Project Scope and Status
 
-Warehouse-portability validation extends the shared dbt transformation chain to Snowflake and Databricks using equivalent synthetic fixtures. A subsequent Databricks replay reads a published Clean v2 Parquet snapshot directly from Amazon S3 through Unity Catalog, builds three candidate views, and passes 18 data tests.
+| Component | Implemented or validated scope |
+|---|---|
+| Streaming platform | Kafka event ingestion and Spark micro-batch processing with layered Parquet output |
+| Primary cloud analytics | S3-backed Athena queries and an Airflow-orchestrated dbt Core workflow |
+| Analytics experience | Original Streamlit dashboard, a separate Athena/dbt Analytics page, and a guarded LLM assistant |
+| Snowflake compatibility | Shared Clean v2 model chain validated with synthetic fixtures and a replay from an S3-loaded source |
+| Databricks compatibility | Shared Clean v2 model chain validated with synthetic fixtures and a Unity Catalog external-table replay from S3 |
+| Export comparison | Five supplied final-mart rows compared across Athena, Snowflake, and Databricks under an explicit tolerance policy |
+| Regression testing | Twelve synthetic-input unit tests and a dedicated GitHub Actions workflow |
+
+The real-time component is the Kafka/Spark platform. Snowflake and Databricks are validated replay targets, not continuously scheduled destinations. The project does not claim production-scale performance, availability guarantees, or automated live cross-engine parity.
+
+All stock-price events are simulated. Results are engineering validation samples, not a live exchange feed or investment signal.
+
+## Contents
+
+- [Key Features](#key-features)
+- [Demo](#demo)
+- [Architecture](#architecture)
+- [Data Layers and Analytics Models](#data-layers-and-analytics-models)
+- [Tech Stack](#tech-stack)
+- [Run Locally](#run-locally)
+- [Orchestration and Monitoring](#orchestration-and-monitoring)
+- [dbt Analytics on Athena](#dbt-analytics-on-athena)
+- [Warehouse Portability and Replay Validation](#warehouse-portability-and-replay-validation)
+- [Cross-Engine Export Comparison](#cross-engine-export-comparison)
+- [Testing and Continuous Integration](#testing-and-continuous-integration)
+- [Engineering Decisions](#engineering-decisions)
+- [Project Structure](#project-structure)
+- [Optional Google BigQuery Export](#optional-google-bigquery-export)
+- [Configuration and Publication Boundaries](#configuration-and-publication-boundaries)
+- [Documentation and Evidence](#documentation-and-evidence)
+- [License](#license)
 
 ## Key Features
 
-- Real-time streaming: Kafka ingests simulated stock-price ticks, and Spark Structured Streaming processes micro-batches every 10 seconds.
-- Data-quality controls: Required-field validation, Kafka-offset deduplication, and a quarantine layer retain invalid events with explicit rejection reasons.
-- Cloud analytics: Amazon Athena queries S3-backed Parquet data; dbt transforms validated stock events into staging, daily metrics, and a latest-available mart.
-- Operational workflows: Airflow schedules data-quality and service-health checks, creates Athena snapshots, and executes dbt models and tests.
-- Analytics experience: A Streamlit dashboard exposes current pipeline health, latest prices, summary metrics, and visual analytics.
-- Natural-language analytics: An LLM-powered assistant translates supported business questions into safe, read-only analytics lookups over curated pipeline output.
-- Warehouse portability: The shared Clean v2 dbt model chain has been validated on Snowflake and Databricks using equivalent synthetic fixtures.
-- Direct S3 replay: Databricks Unity Catalog registers a published Clean v2 Parquet snapshot as an external table for a three-view dbt replay with 18 passing data tests.
+- Streaming ingestion: a Python producer publishes simulated events to Kafka; Spark processes micro-batches every 10 seconds.
+- Data-quality controls: required-field validation, Kafka-offset-based deduplication, and quarantine records with explicit rejection reasons.
+- Layered storage: raw, clean, quarantine, metrics, analytics, and monitoring outputs remain separate.
+- Cloud analytics: Athena queries S3-backed Parquet, with dbt staging, daily metrics, and latest-available mart views.
+- Orchestration: Airflow schedules quality checks, service-health checks, Athena snapshots, and dbt builds.
+- Analytics access: Streamlit presents pipeline health, stock summaries, and a dedicated Athena/dbt page.
+- Guarded natural-language analytics: an LLM assistant routes supported questions to read-only local analytics lookups.
+- Warehouse portability: shared dbt transformation models support Snowflake and Databricks through platform-aware source mappings and timestamp parsing.
+- Replay evidence: Snowflake validates an S3-loaded source; Databricks validates external Parquet access through Unity Catalog.
+- Repeatable validation: a CSV comparison script uses explicit numeric tolerance; twelve unit tests exercise matching and failure cases in CI.
 
 ## Demo
 
-### Ask a natural-language question
+### Natural-language analytics
 
 > User: Show latest prices for AAPL, MSFT, and NVDA.
 >
-> Assistant: Returns the latest available prices, event timestamps, and processed tick counts from the curated Analytics Parquet output.
+> Assistant: Returns the latest available prices, event timestamps, and processed tick counts from curated Analytics Parquet.
 
-![Short demo of the Pipeline Analytics Assistant answering a supported stock-price question](images/assistant-demo.gif)
+![Pipeline Analytics Assistant demonstration](images/assistant-demo.gif)
 
-### Explore pipeline health and analytics
+The assistant uses allowlisted query patterns. It is not an unrestricted SQL agent and cannot modify data, control infrastructure, or provide financial advice.
 
-The dashboard presents service-health status, analytics freshness, symbol-level latest prices, price-range summaries, and processed-tick coverage.
+Supported examples:
 
-Business value: The platform reduces time-to-insight by giving analysts a controlled way to inspect market-data summaries through a dashboard or natural-language questions, without manually querying raw streaming data or writing SQL.
+```text
+Summarize the latest pipeline output
+What is the latest price for AAPL?
+Show latest prices for AAPL, MSFT, and NVDA
+Give me AAPL summary for 2026-09-15
+```
 
-The producer generates simulated events. Screenshots and validation counts demonstrate project behavior, not a live exchange feed, investment signal, or production performance guarantee.
+![Assistant returning latest prices for selected symbols](images/pipeline-analytics-assistant.png)
 
-For the full system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
+### Pipeline observability
+
+The dashboard presents service-health status, analytics freshness, symbol-level prices, summary metrics, and processed-tick coverage. Historical sample results are not presented as current market data.
 
 ## Architecture
+
+### Core platform and primary Athena workflow
 
 ```mermaid
 flowchart TB
@@ -56,103 +99,86 @@ flowchart TB
 
     C --> A[Spark batch analytics Parquet]
     A --> D[Original Streamlit dashboard]
-    A --> L[Read-only LLM assistant]
+    A --> L[Guarded read-only LLM assistant]
     A --> SYNC[Analytics S3 sync helper]
-    SYNC --> LEGACY[Legacy S3 analytics query path]
+    SYNC --> AS3[Analytics Parquet in S3]
+    AS3 --> LEGACY[Athena analytics table and view]
 
-    CS3[Clean Parquet registered in S3] --> CT[Athena clean_stock_prices]
-    CT --> ST[dbt stg_stock_prices]
-    ST --> INT[dbt int_daily_symbol_metrics]
-    INT --> MART[dbt mart_latest_symbol_metrics]
+    CS3[Separately published Clean Parquet in S3] --> CT[Athena clean_stock_prices]
+    CT --> ST[dbt staging view]
+    ST --> INT[dbt daily metrics view]
+    INT --> MART[dbt latest-available mart]
     MART --> PAGE[Streamlit dbt Analytics page]
 
-    AF[Apache Airflow] --> HC[Health checks]
+    AF[Apache Airflow] --> HC[Service-health checks]
     AF --> DQ[Data-quality checks]
-    AF --> SNAP[Current-day Athena snapshot]
+    AF --> SNAP[Current-day Athena snapshot task]
     CT --> SNAP
-    SNAP --> VIEW[v_latest_daily_symbol_metrics]
-    VIEW -->|Task dependency| BUILD[dbt build: 3 models and 14 tests]
-    BUILD -.-> ST
-    HC --> STATUS[Pipeline health JSON and log]
+    SNAP --> VIEW[Update latest snapshot view]
+    VIEW -.->|Execution dependency only| BUILD[dbt build]
+    BUILD -.->|Builds and tests| ST
+    HC --> STATUS[Health JSON and log]
     STATUS --> D
-
-    S -.-> BQ[Optional BigQuery export]
-    M -.-> BQ
-
-    REPLAY[Published Clean v2 S3 snapshot] --> UC[Unity Catalog external location]
-    UC --> EXT[Databricks external Parquet table]
-    EXT --> DST[dbt staging candidate view]
-    DST --> DINT[dbt daily metrics candidate view]
-    DINT --> DMART[dbt latest metrics candidate view]
-    DMART --> TESTS[18 passing data tests]
 ```
 
-The Databricks branch is a manually executed snapshot-replay validation. It is separate from the scheduled Athena workflow and does not replace the streaming job, original dashboard, or assistant.
+The two Athena paths are distinct. The Analytics sync helper publishes Spark Analytics Parquet; the dbt workflow reads the registered Clean source. The diagram does not imply that the helper also publishes Clean data.
 
-## Pipeline Flow
+The Airflow snapshot/view tasks precede the dbt task, but the dbt source is `clean_stock_prices`, not the snapshot view. This is an execution dependency, not a source-data dependency.
 
-1. A Python producer publishes JSON stock-price events to the Kafka topic `pipeline-events`.
-2. Spark Structured Streaming consumes Kafka micro-batches every 10 seconds.
-3. Each batch is retained in the raw Parquet layer for traceability.
-4. Spark validates required fields: a non-empty `symbol`, a positive numeric `price`, and `event_time`.
-5. Valid events are deduplicated using Kafka topic, partition, and offset, then written to partitioned clean Parquet data.
-6. Invalid events are retained in the quarantine layer with a validation-error reason.
-7. Spark writes batch-level raw, clean, and quarantine counts to the metrics layer.
-8. A Spark analytics job creates daily stock-price summaries by event date, symbol, and source.
-9. Analytics Parquet is synchronized to Amazon S3 and queried through Athena.
-10. Airflow schedules data-quality checks, health checks, and Athena-refresh work.
-11. The Streamlit dashboard reads the latest analytics partition and pipeline-health status.
-12. The Pipeline Analytics Assistant answers allowlisted natural-language questions about pipeline output and stock-price summaries.
+### Warehouse replays and validation tooling
 
-The dbt cloud workflow additionally transforms S3-backed Clean events through Athena into staging, daily metrics, and latest-available mart views.
+```mermaid
+flowchart TB
+    S3[Published Clean v2 Parquet snapshot in S3]
 
-For the Databricks replay, a separately published Clean v2 S3 snapshot is registered through Unity Catalog and processed by the shared dbt candidate model chain.
+    S3 --> LOAD[Snowflake source loading]
+    LOAD --> SF[Shared dbt Clean v2 candidate chain on Snowflake]
 
-## Tech Stack
+    S3 --> UC[Unity Catalog external location with IAM-backed credential]
+    UC --> EXT[Databricks external Parquet table]
+    EXT --> DB[Shared dbt Clean v2 candidate chain on Databricks]
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Event producer | Python | Publishes simulated stock-price tick events |
-| Event transport | Apache Kafka | Durable streaming through `pipeline-events` |
-| Stream processing | Apache Spark 3.5 | Validation, deduplication, Parquet persistence, and batch metrics |
-| Storage format | Apache Parquet | Raw, clean, quarantine, metrics, and analytics data layers |
-| Orchestration | Apache Airflow 2.7 | Data-quality, health-check, and Athena-refresh workflows |
-| Metadata database | PostgreSQL 14 | Airflow metadata storage |
-| Cloud storage | Amazon S3 | Stores synchronized analytics data and published replay snapshots |
-| Primary cloud query engine | Amazon Athena | Queries S3-backed stock-price data |
-| Transformations and tests | dbt | Staging, daily metrics, latest-available marts, and data tests |
-| Portability validation | Snowflake | Synthetic-fixture validation of the shared Clean v2 model chain |
-| S3 replay validation | Databricks SQL and Unity Catalog | External Parquet registration and dbt replay from S3 |
-| Cloud access control | AWS IAM | Role-based access to the replay snapshot |
-| Dashboard | Streamlit | Displays pipeline health and market-data analytics |
-| AI assistant | OpenAI API | Routes allowlisted natural-language analytics questions |
-| Containerization | Docker Compose | Reproducible multi-service local environment |
-| Optional warehouse export | Google BigQuery | Secondary export path for events and metrics |
+    AT[Athena final-mart query] --> AE[Athena CSV export]
+    SF --> SE[Snowflake CSV export]
+    DB --> DE[Databricks CSV export]
+    AE --> CMP[Local exported-result comparison]
+    SE --> CMP
+    DE --> CMP
 
-## Data Layers
+    SYN[Synthetic temporary CSV fixtures] --> UT[12 comparison unit tests]
+    GH[GitHub Actions] --> UT
+```
+
+The replay branches were manually executed validations. The diagram does not establish continuous ingestion, scheduled Snowflake/Databricks jobs, or independently verified source identity across the three compared queries.
+
+GitHub Actions runs the synthetic unit tests. It does not query the warehouses or read the ignored local CSV exports.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the separate architecture document. The diagrams above describe the scope summarized in this README.
+
+## Data Layers and Analytics Models
 
 | Layer | Location | Purpose |
 |---|---|---|
-| Raw | `data/raw/stock_prices` | Immutable record of ingested Kafka payloads and ingestion metadata |
-| Clean | `data/clean/stock_prices` | Validated and deduplicated stock-price events, partitioned by `event_date` |
-| Quarantine | `data/quarantine/stock_prices` | Rejected events with validation-error context |
-| Metrics | `data/metrics/stream_batches` | Per-micro-batch raw, clean, and quarantine counts |
-| Analytics | `data/analytics/stock_price_summary` | Daily stock-price summary by date, symbol, and source |
-| Monitoring | `data/monitoring` | Current pipeline-health JSON and append-only health history |
-| S3 replay snapshot | S3 prefix ending in `replay/snowflake-clean-v2-20261015/` | Published Clean v2 Parquet snapshot used for the Databricks replay |
-| Databricks replay | `workspace.clean_live_s3_replay_20261015` | External source table and three candidate analytics views |
+| Raw | `data/raw/stock_prices` | Retained Kafka payloads and ingestion metadata |
+| Clean | `data/clean/stock_prices` | Validated, deduplicated events partitioned by event date |
+| Quarantine | `data/quarantine/stock_prices` | Invalid events with rejection context |
+| Metrics | `data/metrics/stream_batches` | Raw, clean, and quarantine counts per micro-batch |
+| Analytics | `data/analytics/stock_price_summary` | Daily summaries by event date, symbol, and source |
+| Monitoring | `data/monitoring` | Health JSON and append-only health log |
+| Published replay snapshot | S3 prefix ending in `replay/snowflake-clean-v2-20261015/` | Parquet input location used in replay work |
+| Databricks replay namespace | `workspace.clean_live_s3_replay_20261015` | External source table and candidate views |
 
-The S3 prefix retains its original publication name. The `snowflake` segment in that name does not mean the snapshot is restricted to Snowflake; Databricks reads the Parquet objects directly.
+The `snowflake` segment in the snapshot prefix is a publication name, not a restriction on which engine can read the Parquet objects.
 
-## Analytics Model
+### Spark analytics output
 
-The Spark analytics job produces daily stock-price summaries grouped by:
+The batch analytics job groups events by:
 
 ```text
 event_date, symbol, source
 ```
 
-Each summary contains:
+Its summaries contain:
 
 ```text
 tick_count
@@ -165,21 +191,60 @@ last_event_time
 processed_at
 ```
 
-The analytics dataset is partitioned by `event_date`, supporting incremental and partition-aware cloud queries.
+### dbt mart output
 
-The dbt mart is a separate analytics interface. It exposes event counts, average/minimum/maximum prices, event dates, and the latest event timestamp. It does not expose a latest observed price or claim complete market-session OHLC coverage.
+The dbt mart is a separate interface:
+
+```text
+event_date
+symbol
+source
+event_count
+average_price
+minimum_price
+maximum_price
+latest_event_time
+```
+
+It reports captured-event metrics and the latest event timestamp. It does not expose a latest observed price or claim complete market-session OHLC coverage. Each symbol/source pair can have a different latest available date; query time is not event time.
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Producer | Python | Simulated stock-price events |
+| Event transport | Apache Kafka | Streaming through `pipeline-events` |
+| Processing | Apache Spark 3.5 | Streaming validation, deduplication, Parquet output, and batch analytics |
+| Storage | Apache Parquet and Amazon S3 | Local layered datasets and cloud query/replay inputs |
+| Orchestration | Apache Airflow 2.7 | Quality checks, health checks, Athena refresh, and dbt execution |
+| Metadata | PostgreSQL 14 | Airflow metadata |
+| Primary query engine | Amazon Athena | Queries over S3-backed data |
+| Transformations | dbt Core and adapters | Shared models and warehouse data tests |
+| Warehouse validation | Snowflake | Synthetic fixtures and S3-loaded source replay |
+| Lakehouse validation | Databricks SQL and Unity Catalog | Synthetic fixtures and external Parquet replay |
+| Access control | AWS IAM | Cloud access, including the Databricks replay role |
+| User interface | Streamlit | Original dashboard and dedicated Athena/dbt page |
+| Natural-language interface | OpenAI API | Allowlisted analytics question routing |
+| Local deployment | Docker Compose | Multi-service development environment |
+| Comparison tests | Python standard library | CSV validation and synthetic-input unit tests |
+| CI | GitHub Actions | Comparison unit-test execution |
+| Optional export | Google BigQuery and Looker Studio | Secondary warehouse/reporting path |
+
+Versions above describe the documented project configuration, not a claim that these are the latest releases. Replay-specific adapter versions are recorded separately below and in validation records.
 
 ## Run Locally
 
 ### Prerequisites
 
-- Docker Desktop with Docker Compose
-- Python, if running local helper scripts
-- AWS credentials configured only when using S3/Athena features
-- An OpenAI API key in `.env` for the Pipeline Analytics Assistant
-- A local `.env` file containing your configuration; do not commit this file
+- Docker Desktop with Docker Compose.
+- Python for local helper scripts and comparison tooling; the documented dbt environments use Python 3.11.
+- A local `.env` file containing the configuration required by your Compose services.
+- An OpenAI API key when using the LLM assistant.
+- AWS configuration when using S3/Athena features.
 
-Databricks replay additionally requires access to a Databricks SQL warehouse, a configured Unity Catalog external location, and the `dbt-databricks` adapter.
+Cloud warehouse replays additionally require the relevant adapter, account access, source configuration, and warehouse resources. Databricks external-table replay requires Unity Catalog access and a configured external location.
+
+Never commit the local `.env` file or secret-bearing credentials.
 
 ### 1. Start the stack
 
@@ -187,12 +252,14 @@ From the repository root:
 
 ```powershell
 docker compose up -d
+docker compose ps
 ```
 
-Check service status:
+For the custom Airflow/dbt image, build before starting or after image changes:
 
 ```powershell
-docker compose ps
+docker compose build airflow-scheduler
+docker compose up -d
 ```
 
 Expected core services include:
@@ -208,19 +275,17 @@ stock-producer
 pipeline-dashboard
 ```
 
-### 2. Start the streaming job
-
-Use the project helper script:
+### 2. Start streaming
 
 ```powershell
 .\start_stream.ps1
 ```
 
-The streaming job reads Kafka events and writes raw, clean, quarantine, metrics, and checkpoint data under `data/`.
+The job consumes Kafka events and writes raw, clean, quarantine, metrics, and checkpoint output under `data/`.
 
-### 3. Build the analytics layer
+### 3. Build batch analytics
 
-After clean events exist, submit the analytics job:
+After Clean events exist:
 
 ```powershell
 docker exec -it spark-master /opt/spark/bin/spark-submit `
@@ -230,22 +295,22 @@ docker exec -it spark-master /opt/spark/bin/spark-submit `
 
 ### 4. Open local interfaces
 
-| Service | Local URL |
+| Service | URL |
 |---|---|
 | Airflow | `http://localhost:8080` |
 | Spark Master UI | `http://localhost:8081` |
-| Streamlit dashboard | `http://localhost:8501` |
+| Streamlit | `http://localhost:8501` |
 
-### 5. Verify monitoring
+### 5. Verify health output
 
-Trigger `pipeline_health_check` in Airflow, or wait for its five-minute schedule. Then inspect:
+Trigger `pipeline_health_check` in Airflow, or wait for its configured schedule:
 
 ```powershell
 Get-Content .\data\monitoring\pipeline_status.json
 Get-Content .\data\monitoring\pipeline_health.log -Tail 5
 ```
 
-A healthy result includes:
+A healthy sample includes:
 
 ```json
 {
@@ -254,35 +319,25 @@ A healthy result includes:
 }
 ```
 
-## Pipeline Evidence
+### 6. Publish Analytics Parquet when using Athena
 
-### Active Spark Structured Streaming Job
+```powershell
+.\sync_to_s3.ps1
+```
 
-The Spark Master UI shows the active `kafka-to-parquet-stream` application consuming events from Kafka with a live worker and allocated executor resources.
+This helper supports the original Analytics publication path. It does not replace separate Clean-source publication or warehouse replay setup.
 
-![Spark Master UI showing the active kafka-to-parquet-stream Structured Streaming application](images/spark-streaming-job.png)
+## Orchestration and Monitoring
 
-### Data-Quality Quarantine Handling
-
-Spark validates every incoming stock-price event before it reaches the clean layer. Records that fail validation are retained in the quarantine Parquet layer with their validation reason and quarantine timestamp instead of being silently dropped.
-
-The example below shows an intentionally invalid `AAPL` event with `price = -25.5` routed to quarantine with `validation_error = non_positive_price`.
-
-![Spark Shell query showing an invalid negative-price AAPL event retained in the quarantine Parquet layer](images/quarantine-negative-price.png)
-
-### Airflow Orchestration
-
-Airflow schedules data-quality and pipeline-health checks every five minutes and refreshes Athena analytics every 30 minutes.
-
-| DAG | Schedule | Responsibility |
+| DAG | Documented schedule | Responsibility |
 |---|---|---|
-| `pipeline_data_quality_check` | Every 5 minutes | Validates pipeline data-quality expectations |
-| `pipeline_health_check` | Every 5 minutes | Verifies Kafka, Spark Master, and PostgreSQL connectivity |
-| `refresh_athena_analytics` | Every 30 minutes | Creates a current-day snapshot, updates `v_latest_daily_symbol_metrics`, then builds and tests dbt views |
+| `pipeline_data_quality_check` | Every 5 minutes | Pipeline data-quality checks |
+| `pipeline_health_check` | Every 5 minutes | Kafka, Spark Master, and PostgreSQL connectivity |
+| `refresh_athena_analytics` | Every 30 minutes | Current-day snapshot, latest snapshot view update, and dbt build |
 
-![Airflow DAGs showing successful data quality, health check, and Athena refresh workflows](images/airflow-dags-success.png)
+Schedules execute only while the relevant DAGs and Airflow scheduler are enabled and healthy. Replay work is separate from these scheduled tasks.
 
-The Athena/dbt DAG permits two retries with a one-minute delay. Other DAGs use their own configured retry settings. The health-check DAG writes operational artifacts to:
+The Athena/dbt DAG permits two retries with a one-minute delay; its dbt task has a ten-minute execution timeout. Other DAGs retain their own retry settings.
 
 ```text
 data/monitoring/
@@ -290,58 +345,362 @@ data/monitoring/
 └── pipeline_health.log
 ```
 
-`pipeline_status.json` contains the latest machine-readable health snapshot, while `pipeline_health.log` maintains append-only execution history.
+The JSON file is the latest machine-readable health snapshot; the log retains append-only history.
 
-For operational details, see [MONITORING.md](MONITORING.md) and [RUNBOOK.md](RUNBOOK.md).
+![Airflow workflows with successful task evidence](images/airflow-dags-success.png)
 
-### Amazon Athena Analytics
+![Active Spark Structured Streaming application](images/spark-streaming-job.png)
 
-Analytics Parquet data is synchronized to Amazon S3 and queried through the `v_latest_stock_price_summary` Athena view.
+Rejected events are retained rather than silently dropped. The recorded quarantine example contains an intentionally invalid `AAPL` event with `price = -25.5` and `validation_error = non_positive_price`.
 
-![Amazon Athena query results showing latest stock-price summary metrics from S3-backed Parquet data](images/athena-query-results.png)
+![Negative-price event retained in quarantine Parquet](images/quarantine-negative-price.png)
 
-The original analytics publication workflow is:
+See [MONITORING.md](MONITORING.md) and [RUNBOOK.md](RUNBOOK.md) for operational guidance.
+
+## dbt Analytics on Athena
+
+The primary scheduled dbt Core workflow reads `realtime_pipeline.clean_stock_prices`, an existing S3-backed Athena source. dbt does not ingest Kafka events, upload local Clean files, or replace Spark.
+
+| Model | Materialization | Purpose |
+|---|---|---|
+| `stg_stock_prices` | View | Event-level normalization and retained Kafka metadata |
+| `int_daily_symbol_metrics` | View | Daily captured-event metrics by date, symbol, and source |
+| `mart_latest_symbol_metrics` | View | Latest available daily metrics per symbol/source |
+
+### Execution order
 
 ```text
-Clean Parquet → Analytics Parquet → Amazon S3 → Amazon Athena
+refresh_daily_symbol_metrics
+    → update_latest_metrics_view
+    → dbt_build_analytics
 ```
 
-Use the included helper to synchronize local analytics data:
+The first task creates a current-day Parquet snapshot from `clean_stock_prices`; the second updates `v_latest_daily_symbol_metrics`; the third builds/tests dbt views. The dbt models still read `clean_stock_prices`, not the snapshot view.
+
+### Profile and commands
+
+The Airflow image installs dbt in `/opt/dbt-venv`, separate from Airflow packages.
+
+Create the ignored local file `dbt/profiles/profiles.yml`:
+
+```yaml
+stock_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      database: awsdatacatalog
+      schema: "{{ env_var('ATHENA_DATABASE') }}"
+      region_name: "{{ env_var('AWS_REGION') }}"
+      s3_staging_dir: "{{ env_var('ATHENA_OUTPUT') }}"
+      threads: 2
+```
+
+Provide the referenced environment variables and an AWS identity with appropriate Athena, S3, and Glue permissions through local configuration.
 
 ```powershell
-.\sync_to_s3.ps1
+docker compose exec -e DBT_LOG_PATH=/tmp/dbt-logs -e DBT_TARGET_PATH=/tmp/dbt-target airflow-scheduler /opt/dbt-venv/bin/dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
 ```
 
-AWS credentials and bucket details remain in local configuration and are never committed.
+Generate dbt documentation:
 
-The dbt Athena workflow reads the registered Clean source directly; it is distinct from the Analytics Parquet synchronization path.
+```powershell
+docker compose exec -e DBT_LOG_PATH=/tmp/dbt-docs-logs -e DBT_TARGET_PATH=/tmp/dbt-docs airflow-scheduler /opt/dbt-venv/bin/dbt docs generate --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
+```
 
-## Pipeline Analytics Assistant
+Documentation generation was validated on October 7, 2026. Its `index.html`, `manifest.json`, and `catalog.json` output under `/tmp/dbt-docs` is temporary container output; regenerate after container replacement and review metadata before publication.
 
-The dashboard includes a guarded natural-language assistant for pipeline health and stock-price analytics. It reads the same Analytics Parquet output used by the original dashboard.
+### Dashboard boundaries
 
-The assistant uses allowlisted query patterns. It is intentionally read-only: it cannot modify data, control services, run arbitrary SQL, or provide financial advice.
+| Interface | Data source |
+|---|---|
+| Original Streamlit dashboard | Local Analytics Parquet and monitoring artifacts |
+| dbt Analytics page | Fixed read-only Athena query against `mart_latest_symbol_metrics` |
+| LLM assistant | Allowlisted lookups over local Analytics Parquet |
+| Snowflake and Databricks replays | SQL/dbt validation; no warehouse-backed dashboard or assistant integration claimed |
 
-Supported questions include:
+The dbt page caches results for five minutes and displays event timestamps, result-fetch time, and an Athena query ID.
+
+![Athena/dbt dashboard with historical sample data](images/dbt-analytics-dashboard.png)
+
+The October 7 validation displayed 1,497 simulated events across five symbols with an event date of September 4, 2026. This is a different sample from the 5,429-event export comparison below, not a throughput or freshness benchmark.
+
+The original Analytics publication path remains available separately:
 
 ```text
-Summarize the latest pipeline output
-What is the latest price for AAPL?
-Show latest prices for AAPL, MSFT, and NVDA
-Give me AAPL summary for 2026-09-15
+Clean Parquet → Spark Analytics Parquet → S3 → Athena analytics view
 ```
 
-![Pipeline Analytics Assistant returning latest prices for AAPL, MSFT, and NVDA](images/pipeline-analytics-assistant.png)
+![Athena query results for the original analytics path](images/athena-query-results.png)
 
-## Validation and Testing
+## Warehouse Portability and Replay Validation
 
-Run Python tests from the repository root:
+The shared Clean v2 chain is:
+
+```text
+Clean v2 source
+    → stg_stock_prices_v2_candidate
+    → int_daily_symbol_metrics_v2_candidate
+    → mart_latest_symbol_metrics_v2_candidate
+```
+
+Platform-aware source mappings and adapter-dispatched timestamp parsing allow reuse of the transformation chain without separate copies of the three models.
+
+Runs opt in with `use_clean_stock_prices_v2: true`. The legacy branch remains the default.
+
+### Synthetic-fixture validation
+
+Equivalent six-row fixtures were executed on Snowflake and Databricks. Independent fixture replays were performed on October 14, 2026 in isolated schemas.
+
+| Original fixture validation | Snowflake | Databricks |
+|---|---|---|
+| dbt Core | 1.12.5 | 1.12.0 |
+| Adapter | dbt-snowflake 1.12.1 | dbt-databricks 1.12.4 |
+| Candidate views | 3 | 3 |
+| Data tests passed | 18 | 18 |
+| Combined result | `PASS=21 ERROR=0 SKIP=0` | `PASS=21 ERROR=0 SKIP=0` |
+
+The fixture results establish transformation portability, not cloud-source ingestion. Separate Python 3.11 dependency snapshots are retained under `dbt/requirements/`. Both Airflow v2 DAGs remained paused during the documented original fixture validation and independent fixture replay work.
+
+- [Original portability validation](docs/warehouse-portability-validation.md)
+- [Independent fixture replay](docs/warehouse-portability-replay-20261014.md)
+- [Snowflake fixture](dbt/fixtures/snowflake-clean-v2.sql)
+- [Databricks fixture](dbt/fixtures/databricks-clean-v2.sql)
+- [Snowflake replay fixture](dbt/fixtures/snowflake-clean-v2-replay-20261014.sql)
+- [Databricks replay fixture](dbt/fixtures/databricks-clean-v2-replay-20261014.sql)
+
+### Snowflake replay from an S3-loaded source
+
+The subsequent Snowflake replay validated this path:
+
+```text
+Published Clean v2 Parquet in S3
+    → Snowflake source loading
+    → shared dbt Clean v2 candidate chain
+    → model and data-test validation
+    → final-mart query
+```
+
+The replay procedure and saved execution evidence are recorded in [Snowflake Clean v2 replay](docs/snowflake-clean-v2-live-s3-replay-20261015.md).
+
+This is a replay from an S3-loaded source, not a claim of continuous ingestion or scheduled Snowflake execution. Refer to the replay record for its execution details rather than inferring results from the fixture-validation counts.
+
+![Snowflake final-mart replay evidence](images/snowflake-clean-v2-live-s3-replay-20261015-final-mart.png)
+
+### Databricks direct S3 snapshot replay
+
+On October 16, 2026, Databricks read published Clean v2 Parquet through a Unity Catalog external table. The `20261015` suffix identifies the snapshot and namespace, not the execution date.
+
+| Setting | Validated configuration |
+|---|---|
+| Catalog | `workspace` |
+| Source and output schema | `clean_live_s3_replay_20261015` |
+| External location | `s3-replay-20261015` |
+| Source table | `clean_stock_prices_v2` |
+| Source format | Parquet |
+| dbt authentication | Interactive OAuth |
+| dbt Core | 1.12.5 |
+| dbt-databricks | 1.12.7 |
+| Candidate views built | 3 |
+| Data tests passed | 18 |
+
+The external location uses a Unity Catalog storage credential backed by an AWS IAM role. Credential names are environment-specific.
+
+The setup record reports successful storage and role-access checks. Optional file-events permission validation did not pass; this project does not claim file-events-based ingestion.
+
+Inspect the external source without recreating it:
+
+```sql
+DESCRIBE EXTENDED
+workspace.clean_live_s3_replay_20261015.clean_stock_prices_v2;
+```
+
+Source diagnostic:
+
+```sql
+SELECT
+    COUNT(*) AS row_count,
+    COUNT(DISTINCT kafka_offset) AS distinct_offsets
+FROM workspace.clean_live_s3_replay_20261015.clean_stock_prices_v2;
+```
+
+Distinct offsets alone are not a full Kafka identity check: event identity includes topic, partition, and offset.
+
+Configure a local, ignored Databricks profile with the documented structure:
+
+```yaml
+stock_analytics:
+  target: databricks_replay
+  outputs:
+    databricks_replay:
+      type: databricks
+      catalog: workspace
+      schema: CLEAN_LIVE_S3_REPLAY_20261015
+      host: "<your-databricks-workspace-host>"
+      http_path: "<your-sql-warehouse-http-path>"
+      auth_type: oauth
+      threads: 1
+```
+
+Run from the repository root in the Databricks adapter environment:
+
+```powershell
+$env:DBT_SOURCE_DATABASE = "workspace"
+$env:DBT_SOURCE_SCHEMA = "clean_live_s3_replay_20261015"
+
+dbt debug `
+  --project-dir dbt `
+  --profiles-dir dbt\profiles_databricks_replay_20261014
+
+dbt run `
+  --project-dir dbt `
+  --profiles-dir dbt\profiles_databricks_replay_20261014 `
+  --vars '{"use_clean_stock_prices_v2": true}'
+
+dbt test `
+  --project-dir dbt `
+  --profiles-dir dbt\profiles_databricks_replay_20261014 `
+  --vars '{"use_clean_stock_prices_v2": true}'
+```
+
+The ignored profile directory must be created locally; it is not provided by a fresh clone. Its retained `20261014` name does not determine the destination schema. The active profile must target `CLEAN_LIVE_S3_REPLAY_20261015`; source environment variables independently select the input table location.
+
+The successful separate commands reported:
+
+```text
+dbt run:  PASS=3  WARN=0 ERROR=0 SKIP=0
+dbt test: PASS=18 WARN=0 ERROR=0 SKIP=0
+```
+
+Inspect the final mart:
+
+```sql
+SELECT *
+FROM workspace.clean_live_s3_replay_20261015.mart_latest_symbol_metrics_v2_candidate
+ORDER BY event_date, symbol, source;
+```
+
+![Databricks dbt data tests passing](docs/screenshots/20261015_databricks_s3_replay/07_dbt_test_pass_18.png)
+
+![Databricks final-mart output](docs/screenshots/20261015_databricks_s3_replay/09_mart_preview.png)
+
+Full setup and execution screenshots remain in [Databricks replay evidence](docs/screenshots/20261015_databricks_s3_replay/), including external-location configuration, source metadata, source counts, profile configuration, model execution, tests, and candidate views.
+
+## Cross-Engine Export Comparison
+
+On October 16, 2026, five supplied final-mart rows for event date `2026-10-05` and source `simulated-producer` were compared across Athena, Snowflake, and Databricks. The manual review was followed by a repeatable local CSV comparison.
+
+| Symbol | Event count in each supplied export | Minimum price | Maximum price |
+|---|---:|---:|---:|
+| AAPL | 1094 | 224.41 | 300.90 |
+| AMZN | 1079 | 44.26 | 84.76 |
+| MSFT | 1076 | 317.32 | 349.99 |
+| NVDA | 1058 | 158.62 | 187.62 |
+| TSLA | 1122 | 140.98 | 197.57 |
+
+Each export contained five mart rows representing 5,429 events, calculated by summing `event_count`. This is a sample count, not a production throughput measurement.
+
+### Comparison policy
+
+- Normalize header casing and trim surrounding field whitespace.
+- Reject unexpected or duplicate columns, malformed rows, empty fields, empty results, and duplicate grouping keys.
+- Align rows by `(event_date, symbol, source)` and detect missing or extra keys.
+- Compare event counts and minimum/maximum prices numerically using decimal arithmetic.
+- Compare average prices with an absolute tolerance of `1E-10`.
+- Compare timestamp wall-clock values after parsing their supplied representations.
+
+The timestamp check deliberately removes timezone information for wall-clock comparison. It does not normalize all values to UTC or establish equality of instants.
+
+### Observed result
+
+```text
+athena: 5 rows; total event_count = 5429
+snowflake: 5 rows; total event_count = 5429
+databricks: 5 rows; total event_count = 5429
+snowflake vs athena: maximum average-price difference = 3.338E-11
+databricks vs athena: maximum average-price difference = 0
+
+Average-price absolute tolerance: 1E-10
+Timestamp check: wall-clock values only; timezone parity NOT verified.
+Source snapshot identity and full-result completeness NOT verified.
+
+RESULT: PASS for supplied exports under the stated comparison policy
+```
+
+The numeric tolerance is an explicit policy for this check, not an exact-equality claim or a universal financial-data tolerance.
+
+### Run the comparison
+
+Download original query-result CSVs and place them locally at:
+
+```text
+tests/cross_engine/local_exports/
+├── athena.csv
+├── snowflake.csv
+└── databricks.csv
+```
+
+This directory is Git-ignored and is not populated by a fresh clone. Preserve full exported precision and timestamps; avoid spreadsheet reformatting or resaving before validation.
+
+```powershell
+python .\tests\cross_engine\compare_exports.py
+```
+
+The script compares files only. It does not execute warehouse queries, verify query provenance, or confirm that the same S3 objects were read by each engine.
+
+See the original [manual comparison record](docs/clean-v2-cross-engine-manual-comparison-20261016.md). That document records the manual evidence stage; the script and unit tests implement the subsequent repeatable check.
+
+## Testing and Continuous Integration
+
+### Comparison unit tests
+
+Run without cloud credentials, Docker, or local warehouse exports:
+
+```powershell
+python .\tests\cross_engine\test_compare_exports.py
+```
+
+The validated run completed twelve tests successfully. Synthetic temporary CSVs exercise:
+
+- Matching exports.
+- Uppercase headers.
+- Equivalent numeric formatting.
+- Average differences inside and outside tolerance.
+- Event-count differences.
+- Missing and extra keys.
+- Duplicate keys.
+- Empty exports.
+- Equivalent timestamp display formats.
+- Different timestamp wall-clock values.
+
+These tests protect specific checker behaviors; they do not prove exhaustive coverage of every malformed input or every warehouse semantic difference.
+
+### GitHub Actions
+
+The [Clean v2 comparison workflow](.github/workflows/clean-v2-comparison-tests.yml) runs the synthetic unit tests for relevant pull requests and pushes to `main`, and supports manual dispatch.
+
+The final workflow configuration uses:
+
+```text
+Runner: ubuntu-24.04
+Python: 3.11
+Checkout: actions/checkout@v6
+Python setup: actions/setup-python@v6
+```
+
+CI requires no cloud credentials or local exports and does not execute live parity checks. A successful Actions run was observed during workflow validation; consult the repository Actions tab for current status.
+
+### Other project tests
+
+Run the broader Python suite in an environment with its required dependencies:
 
 ```powershell
 python -m pytest tests -v
 ```
 
-Run the Spark smoke test:
+This broader command is separate from the dedicated CI job above; its inclusion here does not claim a newly verified full-suite pass.
+
+Run the Spark smoke test in the running stack:
 
 ```powershell
 docker exec -it spark-master /opt/spark/bin/spark-submit `
@@ -349,91 +708,52 @@ docker exec -it spark-master /opt/spark/bin/spark-submit `
   /opt/spark-apps/smoke_test.py
 ```
 
-Operational validation checklist:
-
-- Docker services are running: `docker compose ps`
-- Spark Structured Streaming is active and writing data
-- Raw, clean, quarantine, metrics, and analytics layers exist under `data/`
-- Invalid records include an explicit rejection reason in quarantine Parquet
-- Airflow health-check and data-quality DAGs complete successfully
-- `data/monitoring/pipeline_status.json` reports `healthy`
-- Athena queries the S3-backed analytics table or view
-- The Streamlit dashboard renders the latest analytics output
-- The Pipeline Analytics Assistant answers allowlisted questions only
-
 ### dbt validation counts
 
-| Validation scope | Models | Data tests | Interpretation |
+| Recorded validation scope | Models | Data tests | Interpretation |
 |---|---:|---:|---|
-| Original Athena analytics | 3 | 14 | A successful combined build has 17 successful resources |
-| Clean v2 synthetic-fixture portability | 3 | 18 | A successful combined build has 21 successful resources |
-| Databricks direct S3 snapshot replay | 3 | 18 | Separate runs reported `PASS=3` for models and `PASS=18` for tests |
+| Original Athena analytics | 3 | 14 | 17 successful resources in a combined build |
+| Clean v2 fixture portability | 3 | 18 | 21 successful resources in a combined build |
+| Databricks external-table replay | 3 | 18 | Separate `PASS=3` model and `PASS=18` test summaries |
 
-Model counts and test counts are separate. A combined `PASS=21` result means three models plus 18 tests, not 21 tests.
+The twelve Python unit tests are separate from the dbt data tests. Do not combine these into a single warehouse-validation count.
 
-## Optional Google BigQuery Export
+### Operational checklist
 
-BigQuery export and Looker Studio demonstrate a secondary warehouse/reporting path.
-
-The primary scheduled dbt cloud workflow is:
-
-```text
-S3-backed Clean events
-→ Athena
-→ dbt views
-→ dedicated Streamlit dbt Analytics page
-```
-
-The original dashboard and assistant read local Analytics Parquet. The Databricks integration is a separate snapshot-replay validation.
-
-The `gcp/` directory contains optional utilities that export pipeline events and streaming metrics to a Google BigQuery dataset named `realtime_pipeline`.
-
-| Script | Source | BigQuery table |
-|---|---|---|
-| `gcp/export_events_to_bigquery.py` | Pipeline events | `realtime_pipeline.events` |
-| `gcp/export_metrics_to_bigquery.py` | Streaming metrics | `realtime_pipeline.metrics` |
-
-### BigQuery Event Export
-
-The optional event export loads pipeline event records into `realtime_pipeline.events` for cloud-warehouse analysis.
-
-![BigQuery query results showing optional exported pipeline event records](images/bigquery-events.png)
-
-### BigQuery Metrics Export
-
-The optional metrics evidence also includes source-level event counts and revenue metrics queried from `realtime_pipeline.source_metrics`.
-
-![BigQuery query results showing optional exported pipeline source metrics](images/bigquery-metrics.png)
-
-### Optional Looker Studio Exploration
-
-A Looker Studio dashboard can visualize the optional BigQuery export path.
-
-![Looker Studio dashboard using the optional BigQuery export dataset](images/looker-studio-dashboard.png)
-
-See [gcp/README.md](gcp/README.md) for requirements and usage.
+- Docker services are running.
+- Spark is consuming events and writing layered output.
+- Invalid records have explicit quarantine reasons.
+- Relevant Airflow DAGs complete successfully when enabled.
+- Health JSON reports the observed service state.
+- Athena can query the configured S3-backed datasets.
+- Streamlit shows the intended data source and timestamps.
+- The assistant answers allowlisted questions only.
 
 ## Engineering Decisions
 
-- Layered Parquet storage: Raw, clean, quarantine, metrics, and analytics layers preserve traceability while separating valid events from rejected data.
-- Kafka-offset deduplication: Kafka topic, partition, and offset provide a stable event identity within the stream.
-- Partitioned analytics: Clean and analytics data are partitioned by event date for partition-aware processing and queries.
-- Quarantine instead of silent drops: Invalid events are preserved with explicit error reasons.
-- Independent orchestration: Airflow manages data quality, infrastructure health, and Athena refresh as separate workflows.
-- Retry logic: The Athena/dbt DAG permits two retries with a one-minute delay; the dbt task has a ten-minute execution timeout.
-- Machine-readable monitoring: The health DAG produces a current JSON status file and append-only health log.
-- Guarded AI assistant: The assistant uses allowlisted queries and cannot modify data, execute arbitrary SQL, or operate infrastructure.
-- Local-first reproducibility: Docker Compose runs the local stack, while S3/Athena provides the primary cloud analytics path.
-- Shared dbt transformations: Platform-aware source mappings and adapter-dispatched timestamp parsing support warehouse portability without separate copies of the three transformation models.
-- Explicit Clean v2 opt-in: `use_clean_stock_prices_v2: true` selects the Clean v2 source and candidate view aliases; the legacy branch remains the default.
-- Isolated replay namespace: The Databricks S3 replay uses `workspace.clean_live_s3_replay_20261015` to separate replay outputs from earlier validation schemas.
-- Role-based S3 access: The Databricks external location uses a Unity Catalog storage credential backed by an AWS IAM role.
-- Optional BigQuery support: Export utilities remain a secondary integration rather than a required part of the primary architecture.
+- Layered storage preserves traceability while separating accepted data, rejected records, analytics, and operational state.
+- Kafka topic, partition, and offset provide the stream event identity used for deduplication; business-event uniqueness across arbitrary replays is a separate concern.
+- Event-date partitioning supports partition-aware processing and queries.
+- Quarantine preserves rejected events with actionable error context.
+- Airflow separates quality checks, infrastructure health, and Athena refresh responsibilities.
+- dbt Core runs in an isolated environment inside the Airflow image to separate adapter dependencies from Airflow packages.
+- Shared transformations use adapter-aware parsing and source mappings instead of maintaining three independent model implementations.
+- Clean v2 is explicitly enabled; the legacy source branch remains available by default.
+- Warehouse replay namespaces isolate validation outputs from earlier fixtures.
+- The original dashboard, Athena/dbt page, and LLM assistant retain distinct data-source boundaries.
+- Decimal-based export comparison uses a stated tolerance instead of silently rounding source data.
+- Synthetic unit tests run without production data or cloud credentials.
+- Optional BigQuery utilities remain a secondary integration rather than a required dependency of the core platform.
 
 ## Project Structure
 
+Selected tracked files and directories are shown below. This is a navigational overview, not an exhaustive repository inventory.
+
 ```text
 Real-Time-Data-Engineering-Pipeline/
+├── .github/
+│   └── workflows/
+│       └── clean-v2-comparison-tests.yml
 ├── airflow/
 │   ├── Dockerfile.dbt
 │   └── dags/
@@ -457,12 +777,20 @@ Real-Time-Data-Engineering-Pipeline/
 │   │   └── databricks-clean-v2-replay-20261014.sql
 │   ├── macros/
 │   ├── models/
+│   │   ├── sources.yml
+│   │   ├── staging/
+│   │   ├── intermediate/
+│   │   └── marts/
 │   ├── profile_examples/
 │   │   ├── snowflake/
 │   │   └── databricks/
+│   ├── profiles_snowflake_live_s3_replay_20261015/
+│   │   └── profiles.yml
 │   ├── requirements/
 │   └── tests/
 ├── docs/
+│   ├── clean-v2-cross-engine-manual-comparison-20261016.md
+│   ├── snowflake-clean-v2-live-s3-replay-20261015.md
 │   ├── warehouse-portability-validation.md
 │   ├── warehouse-portability-replay-20261014.md
 │   └── screenshots/
@@ -480,445 +808,97 @@ Real-Time-Data-Engineering-Pipeline/
 ├── producer/
 │   ├── requirements.txt
 │   └── stock_producer.py
+├── scripts/
 ├── spark/
 │   └── jobs/
 │       ├── build_analytics_layer.py
 │       ├── kafka_stream.py
 │       └── smoke_test.py
+├── src/
 ├── tests/
+│   └── cross_engine/
+│       ├── compare_exports.py
+│       └── test_compare_exports.py
 ├── utils/
+├── .gitignore
 ├── ARCHITECTURE.md
 ├── docker-compose.yml
+├── LICENSE.txt
 ├── MONITORING.md
 ├── README.md
 ├── RUNBOOK.md
+├── requirements-dev.txt
 ├── run_health_check.ps1
 ├── start_stream.ps1
 └── sync_to_s3.ps1
 ```
 
-Local virtual environments, secret-bearing configuration, generated dbt
-artifacts, and logs should remain outside version control.
+Local runtime datasets, comparison exports, logs, environments, and active ignored profiles are intentionally omitted from this tracked-files overview. Their presence on a developer machine is not evidence that they are committed.
 
-The Snowflake S3 replay profile is an environment-specific configuration
-record. It references its password through
-`DBT_ENV_SECRET_SNOWFLAKE_PASSWORD` rather than storing the password
-directly. Account and user identifiers remain in that profile.
+## Optional Google BigQuery Export
 
-The active local Databricks replay profile is omitted from the tracked
-project structure.
+The optional `gcp/` path demonstrates secondary cloud warehouse/reporting integration. It is not required for the primary Spark/S3/Athena/dbt workflow.
 
-## dbt Analytics Layer
-
-![Streamlit dbt Analytics page showing five symbols, 1,497 simulated events, and visible historical event timestamps](images/dbt-analytics-dashboard.png)
-
-The primary dbt project queries the existing S3-backed Athena table `realtime_pipeline.clean_stock_prices`. It does not ingest Kafka events, upload local Clean files, or replace the Spark streaming job.
-
-### Models
-
-| Model | Materialization | Grain and purpose |
-|---|---|---|
-| `stg_stock_prices` | View | Event-level data with normalized symbols and retained Kafka metadata |
-| `int_daily_symbol_metrics` | View | Daily captured-event metrics by event date, symbol, and source |
-| `mart_latest_symbol_metrics` | View | Latest available daily metrics for each symbol/source pair |
-
-The mart exposes event counts, average/minimum/maximum prices, event dates, and the latest event timestamp. It does not expose a latest observed price or claim complete market-session OHLC coverage.
-
-Each symbol/source pair can have a different latest available date. Historical sample data is explicitly labeled; query time is not event time.
-
-### Automated tests
-
-The original Athena validation project contains 14 data tests:
-
-- Staging: four required-field tests and one positive-price/nonblank-symbol test.
-- Intermediate: three required-field tests.
-- Mart: five required-field tests and one symbol/source uniqueness test.
-
-A successful `dbt build` reports 17 successful resources: three models plus 14 tests. This does not represent 17 tests or an uptime SLA.
-
-The Clean v2 warehouse-portability replay chain contains 18 data tests. A successful combined replay build reports 21 successful resources: three candidate views plus 18 tests.
-
-### Airflow execution
-
-The `refresh_athena_analytics` DAG runs every 30 minutes:
-
-```text
-refresh_daily_symbol_metrics
-    → update_latest_metrics_view
-    → dbt_build_analytics
-```
-
-The first task creates a current-day Parquet snapshot from `clean_stock_prices`. The second updates `v_latest_daily_symbol_metrics`. The final task builds and tests the dbt models.
-
-The dbt source is `clean_stock_prices`, not the snapshot view. The dependency controls execution order; it does not make the dbt models read the snapshot or perform an upstream S3 sync.
-
-### Dashboard and assistant boundaries
-
-- Original Streamlit dashboard: local Analytics Parquet and pipeline-health artifacts.
-- dbt Analytics page: fixed read-only Athena query against `mart_latest_symbol_metrics`.
-- LLM assistant: existing allowlisted lookups against local Analytics Parquet.
-- Databricks replay: SQL and dbt validation; no Databricks-backed dashboard or assistant integration is claimed.
-
-The dbt page caches results for five minutes and displays event timestamps, result-fetch time, and an Athena query ID.
-
-### Running dbt in Docker
-
-The custom Airflow image uses Python 3.11 and installs dbt in `/opt/dbt-venv`, separate from Airflow packages.
-
-Build the image before starting the stack:
-
-```powershell
-docker compose build airflow-scheduler
-docker compose up -d
-```
-
-Create the Git-ignored `dbt/profiles/profiles.yml` locally:
-
-```yaml
-stock_analytics:
-  target: dev
-  outputs:
-    dev:
-      type: athena
-      database: awsdatacatalog
-      schema: "{{ env_var('ATHENA_DATABASE') }}"
-      region_name: "{{ env_var('AWS_REGION') }}"
-      s3_staging_dir: "{{ env_var('ATHENA_OUTPUT') }}"
-      threads: 2
-```
-
-Supply AWS credentials through local configuration, never committed files. The AWS identity needs appropriate Athena, S3, and Glue permissions.
-
-Run the models and tests:
-
-```powershell
-docker compose exec -e DBT_LOG_PATH=/tmp/dbt-logs -e DBT_TARGET_PATH=/tmp/dbt-target airflow-scheduler /opt/dbt-venv/bin/dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
-```
-
-Generate documentation:
-
-```powershell
-docker compose exec -e DBT_LOG_PATH=/tmp/dbt-docs-logs -e DBT_TARGET_PATH=/tmp/dbt-docs airflow-scheduler /opt/dbt-venv/bin/dbt docs generate --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt/profiles
-```
-
-Documentation generation was validated on October 7, 2026 and produced `index.html`, `manifest.json`, and `catalog.json`.
-
-These files are generated under `/tmp/dbt-docs` inside the scheduler container and are temporary; regenerate them after container replacement. Generated metadata may contain infrastructure identifiers and should be reviewed before publication.
-
-### Validated sample
-
-The October 7, 2026 validation displayed 1,497 simulated events summarized across five symbols: AAPL, AMZN, MSFT, NVDA, and TSLA. The displayed event date was September 4, 2026.
-
-These are sample-validation counts, not daily throughput, live-data freshness, or production-scale performance claims.
-
-### Relevant source files
-
-```text
-airflow/Dockerfile.dbt
-dashboard/pages/1_dbt_Analytics.py
-dbt/dbt_project.yml
-dbt/models/sources.yml
-dbt/models/staging/stg_stock_prices.sql
-dbt/models/staging/staging.yml
-dbt/models/intermediate/int_daily_symbol_metrics.sql
-dbt/models/intermediate/intermediate.yml
-dbt/models/marts/mart_latest_symbol_metrics.sql
-dbt/models/marts/marts.yml
-dbt/tests/assert_stock_price_values_valid.sql
-dbt/tests/assert_latest_symbol_metrics_unique.sql
-```
-
-## dbt Warehouse Portability
-
-The original Athena validation remains the primary scheduled cloud-analytics workflow.
-
-Warehouse portability was validated in two distinct stages:
-
-1. Synthetic-fixture validation on Snowflake and Databricks.
-2. Direct S3 snapshot replay on Databricks through Unity Catalog.
-
-The second stage adds real cloud-storage integration to the Databricks validation; it does not change the scope of the earlier synthetic-fixture results.
-
-### Synthetic-fixture validation
-
-The shared dbt model chain was executed on Snowflake and Databricks using equivalent six-row synthetic fixtures:
-
-```text
-Clean v2 source
-    → staging
-    → daily symbol metrics
-    → latest-available symbol metrics
-```
-
-Adapter-dispatched timestamp parsing and platform-aware source mappings allow the same model chain to run without separate copies of the three transformation models.
-
-| Original fixture validation | Snowflake | Databricks |
-|---|---|---|
-| dbt Core | 1.12.5 | 1.12.0 |
-| Adapter | dbt-snowflake 1.12.1 | dbt-databricks 1.12.4 |
-| Candidate views built | 3 | 3 |
-| Data tests passed | 18 | 18 |
-| Combined build result | PASS=21, ERROR=0, SKIP=0 | PASS=21, ERROR=0, SKIP=0 |
-
-Runs explicitly enable `use_clean_stock_prices_v2: true` and build `*_v2_candidate` views. The legacy source branch remains the default.
-
-These original results demonstrate synthetic-fixture transformation portability, not live S3 integration or scheduled execution on the additional platforms.
-
-### Independent fixture replay
-
-The saved fixture scripts were independently replay-tested on October 14, 2026 in isolated Snowflake and Databricks schemas.
-
-Both replays rebuilt the three Clean v2 candidate views and passed all 18 data tests. Detailed replay commands, fixture verification, version information, and execution screenshots are recorded in the replay document.
-
-- [Original validation record and execution screenshots](docs/warehouse-portability-validation.md)
-- [Independent replay record and execution screenshots](docs/warehouse-portability-replay-20261014.md)
-- [Original Snowflake fixture SQL](dbt/fixtures/snowflake-clean-v2.sql)
-- [Original Databricks fixture SQL](dbt/fixtures/databricks-clean-v2.sql)
-- [Snowflake replay fixture SQL](dbt/fixtures/snowflake-clean-v2-replay-20261014.sql)
-- [Databricks replay fixture SQL](dbt/fixtures/databricks-clean-v2-replay-20261014.sql)
-- [Snowflake development profile example](dbt/profile_examples/snowflake/profiles.example.yml)
-- [Databricks interactive OAuth profile example](dbt/profile_examples/databricks/profiles.example.yml)
-- [Snowflake replay profile example](dbt/profile_examples/snowflake/profiles.replay-20261014.example.yml)
-
-Separate Windows/Python 3.11 dependency snapshots are available under `dbt/requirements/`. Both Airflow v2 DAGs remained paused during the original validation and fixture-replay work.
-
-## Databricks Direct S3 Snapshot Replay
-
-On October 16, 2026, the Clean v2 candidate model chain was successfully executed against a published S3 Parquet snapshot through Databricks Unity Catalog.
-
-Unlike the earlier six-row fixture validation, this replay reads the published Parquet objects through an external table rather than creating a synthetic source table inside the warehouse.
-
-The `20261015` suffix identifies the replay snapshot and namespace. The execution and screenshot capture occurred on October 16, 2026.
-
-### Validated replay path
-
-```text
-Published Clean v2 Parquet snapshot in S3
-    → AWS IAM role
-    → Unity Catalog storage credential
-    → Unity Catalog external location
-    → external Parquet table
-    → stg_stock_prices_v2_candidate
-    → int_daily_symbol_metrics_v2_candidate
-    → mart_latest_symbol_metrics_v2_candidate
-    → 18 passing dbt data tests
-```
-
-### Replay configuration
-
-| Setting | Value |
+| Script | Documented output |
 |---|---|
-| Catalog | `workspace` |
-| Source schema | `clean_live_s3_replay_20261015` |
-| dbt output schema | `clean_live_s3_replay_20261015` |
-| External location | `s3-replay-20261015` |
-| External source table | `clean_stock_prices_v2` |
-| Source format | Parquet |
-| Authentication | Interactive OAuth |
-| dbt Core | 1.12.5 |
-| Databricks adapter | 1.12.7 |
-| Candidate views built | 3 |
-| Data tests passed | 18 |
+| `gcp/export_events_to_bigquery.py` | `realtime_pipeline.events` |
+| `gcp/export_metrics_to_bigquery.py` | `realtime_pipeline.metrics` |
 
-The external location uses a storage credential backed by an AWS IAM role. The credential name is environment-specific; use the credential linked to the external location rather than assuming a fixed name.
+Historical evidence also includes a `realtime_pipeline.source_metrics` query with source-level counts and revenue metrics. That supporting artifact is distinct from the stock-price mart and does not establish that the current metrics exporter writes that table.
 
-S3 read, list, write, delete, path-existence, role-assumption, self-assumption, and external-ID checks passed during setup.
+- [BigQuery event evidence](images/bigquery-events.png)
+- [Supporting BigQuery metrics evidence](images/bigquery-metrics.png)
+- [Looker Studio exploration](images/looker-studio-dashboard.png)
+- [Optional export setup](gcp/README.md)
 
-Optional file-events permission validation did not pass. The external location was created without verified file-events provisioning; this milestone does not claim file-events-based ingestion.
+## Configuration and Publication Boundaries
 
-![Databricks external location configured for the published S3 replay snapshot](docs/screenshots/20261015_databricks_s3_replay/01_external_location.png)
+- Supply passwords, tokens, API keys, and AWS credentials through local configuration or supported authentication mechanisms; do not commit secret values.
+- Local environments, generated dbt artifacts, runtime logs, and export datasets should remain outside version control.
+- The tracked Snowflake S3 replay profile is an environment-specific record. It references `DBT_ENV_SECRET_SNOWFLAKE_PASSWORD` rather than storing the password directly. Account and user identifiers remain in that record.
+- The active local Databricks replay profile is ignored and must be created locally. Its historical directory name does not determine its target schema.
+- Resource paths, account names, and infrastructure identifiers may appear in replay records. They are not equivalent to passwords, but should be reviewed before public sharing.
+- Review screenshots and generated dbt metadata for credentials, personal information, external IDs, and infrastructure identifiers before publication.
 
-![Storage credential details for the AWS IAM role used by the external location](docs/screenshots/20261015_databricks_s3_replay/02_storage_credential_details.png)
+Profile examples:
 
-### External table
+- [Snowflake development example](dbt/profile_examples/snowflake/profiles.example.yml)
+- [Databricks OAuth example](dbt/profile_examples/databricks/profiles.example.yml)
+- [Snowflake fixture replay example](dbt/profile_examples/snowflake/profiles.replay-20261014.example.yml)
 
-The existing source table can be inspected without recreating it:
+### Validation boundaries
 
-```sql
-DESCRIBE EXTENDED
-workspace.clean_live_s3_replay_20261015.clean_stock_prices_v2;
-```
+The supplied replay and export evidence does not establish:
 
-The captured metadata documents the external table, Parquet provider, and S3 snapshot location.
-
-![Databricks external table metadata showing the Parquet provider and S3 replay location](docs/screenshots/20261015_databricks_s3_replay/03_external_table_creation.png)
-
-### Source verification
-
-The source-verification query is:
-
-```sql
-SELECT
-    COUNT(*) AS row_count,
-    COUNT(DISTINCT kafka_offset) AS distinct_offsets
-FROM workspace.clean_live_s3_replay_20261015.clean_stock_prices_v2;
-```
-
-The screenshot records the observed values for the published snapshot.
-
-Distinct offsets are a snapshot diagnostic, not a complete Kafka identity uniqueness check. The pipeline event identity uses topic, partition, and offset together.
-
-![Databricks query showing the source row count and distinct Kafka offsets](docs/screenshots/20261015_databricks_s3_replay/04_s3_source_row_count.png)
-
-### Local profile configuration
-
-The local replay profile uses the following structure:
-
-```yaml
-stock_analytics:
-  target: databricks_replay
-  outputs:
-    databricks_replay:
-      type: databricks
-      catalog: workspace
-      schema: CLEAN_LIVE_S3_REPLAY_20261015
-      host: "<your-databricks-workspace-host>"
-      http_path: "<your-sql-warehouse-http-path>"
-      auth_type: oauth
-      threads: 1
-```
-
-The active profile is local and Git-ignored.
-
-The profile schema controls where dbt writes its models. Source environment variables independently control where dbt reads its source table.
-
-During setup, the profile initially targeted `DBT_REPLAY_20261014`, so successful model executions wrote views to that earlier schema. Updating the active profile to `CLEAN_LIVE_S3_REPLAY_20261015` placed the candidate views in the intended replay namespace.
-
-![Local dbt profile showing the live S3 replay output schema](docs/screenshots/20261015_databricks_s3_replay/05_dbt_profile_live_s3_schema.png)
-
-### Replay commands
-
-Run from the repository root in an environment with the Databricks adapter installed.
-
-The following commands use the local profile directory from this validation:
-
-```powershell
-$env:DBT_SOURCE_DATABASE = "workspace"
-$env:DBT_SOURCE_SCHEMA = "clean_live_s3_replay_20261015"
-
-dbt debug `
-  --project-dir dbt `
-  --profiles-dir dbt\profiles_databricks_replay_20261014
-```
-
-Build the candidate views:
-
-```powershell
-dbt run `
-  --project-dir dbt `
-  --profiles-dir dbt\profiles_databricks_replay_20261014 `
-  --vars '{"use_clean_stock_prices_v2": true}'
-```
-
-Run the data tests:
-
-```powershell
-dbt test `
-  --project-dir dbt `
-  --profiles-dir dbt\profiles_databricks_replay_20261014 `
-  --vars '{"use_clean_stock_prices_v2": true}'
-```
-
-The profile directory retains its earlier `20261014` name. Its configured target schema—not the directory name—determines the destination for the models.
-
-The project file is `dbt/dbt_project.yml`, so commands run from the repository root include `--project-dir dbt`.
-
-No `clean_v2` tag is required for these commands. The Clean v2 branch is enabled through the dbt variable.
-
-### Execution results
-
-The successful model execution reported:
-
-```text
-PASS=3 WARN=0 ERROR=0 SKIP=0
-```
-
-The successful data-test execution reported:
-
-```text
-PASS=18 WARN=0 ERROR=0 SKIP=0
-```
-
-These are separate command summaries: three successful model builds and 18 passing tests.
-
-![dbt run showing three candidate views built successfully in the live S3 replay schema](docs/screenshots/20261015_databricks_s3_replay/06_dbt_run_success.png)
-
-![dbt test showing 18 passing data tests with no warnings or errors](docs/screenshots/20261015_databricks_s3_replay/07_dbt_test_pass_18.png)
-
-### Candidate views
-
-The replay creates:
-
-```text
-workspace.clean_live_s3_replay_20261015.stg_stock_prices_v2_candidate
-workspace.clean_live_s3_replay_20261015.int_daily_symbol_metrics_v2_candidate
-workspace.clean_live_s3_replay_20261015.mart_latest_symbol_metrics_v2_candidate
-```
-
-Inspect them in Databricks SQL:
-
-```sql
-USE CATALOG workspace;
-USE SCHEMA clean_live_s3_replay_20261015;
-SHOW VIEWS;
-```
-
-![Databricks showing the three Clean v2 candidate views in the replay schema](docs/screenshots/20261015_databricks_s3_replay/08_databricks_model_views.png)
-
-Preview the mart:
-
-```sql
-SELECT *
-FROM workspace.clean_live_s3_replay_20261015.mart_latest_symbol_metrics_v2_candidate
-LIMIT 10;
-```
-
-![Databricks mart preview showing the latest available symbol metrics from the replay](docs/screenshots/20261015_databricks_s3_replay/09_mart_preview.png)
-
-### Scope and limitations
-
-This milestone validates:
-
-- Direct access to a published Clean v2 S3 Parquet snapshot through Unity Catalog.
-- Successful creation of three dbt candidate views in the intended replay schema.
-- Execution of 18 passing data tests.
-- Reuse of the shared dbt transformation chain with a platform-specific source mapping.
-
-It does not establish:
-
-- Continuous Kafka-to-Databricks streaming ingestion.
-- Scheduled Databricks execution through Airflow.
-- File-events-based ingestion.
-- Automated Snowflake-versus-Databricks row-level or aggregate parity.
-- Databricks integration with the Streamlit dashboard or LLM assistant.
+- Continuous Kafka-to-Snowflake or Kafka-to-Databricks ingestion.
+- Scheduled Snowflake or Databricks execution through Airflow.
+- Databricks file-events-based ingestion.
+- Live warehouse-query automation in GitHub Actions.
+- Independently verified input snapshot identity or full-result completeness across engines.
+- Timestamp timezone parity or exact full-precision equality across all warehouse values.
+- Snowflake/Databricks integration with the dashboard or LLM assistant.
 - Production-scale throughput, latency, cost, or availability guarantees.
 
-The replay is a point-in-time validation of the published snapshot and dbt model chain.
+These boundaries qualify the evidence; they are not prerequisites for the completed goal of a Spark/AWS platform with a dbt layer validated on additional warehouse targets.
 
-## Screenshots and Documentation
+## Documentation and Evidence
 
-Existing dashboard, streaming, orchestration, Athena, and optional BigQuery screenshots remain under [`images/`](images/).
+| Resource | Contents |
+|---|---|
+| [Architecture](ARCHITECTURE.md) | Separate system-design document |
+| [Monitoring](MONITORING.md) | Health-check documentation |
+| [Runbook](RUNBOOK.md) | Operational guidance |
+| [Original portability validation](docs/warehouse-portability-validation.md) | Fixture-based Snowflake/Databricks evidence |
+| [Independent fixture replay](docs/warehouse-portability-replay-20261014.md) | Isolated replay commands and results |
+| [Snowflake S3-loaded replay](docs/snowflake-clean-v2-live-s3-replay-20261015.md) | Source-loading procedure and execution evidence |
+| [Databricks S3 replay screenshots](docs/screenshots/20261015_databricks_s3_replay/) | External access, metadata, dbt execution, tests, and mart results |
+| [Manual comparison record](docs/clean-v2-cross-engine-manual-comparison-20261016.md) | Original manual cross-engine result review |
+| [Comparison script](tests/cross_engine/compare_exports.py) | Repeatable local CSV validation |
+| [Comparison unit tests](tests/cross_engine/test_compare_exports.py) | Synthetic matching/failure-case coverage |
+| [CI workflow](.github/workflows/clean-v2-comparison-tests.yml) | Automated comparison unit tests |
+| [Images](images/) | Core platform and supporting implementation evidence |
 
-Databricks S3 replay evidence is stored separately under:
-
-```text
-docs/screenshots/20261015_databricks_s3_replay/
-├── 01_external_location.png
-├── 02_storage_credential_details.png
-├── 03_external_table_creation.png
-├── 04_s3_source_row_count.png
-├── 05_dbt_profile_live_s3_schema.png
-├── 06_dbt_run_success.png
-├── 07_dbt_test_pass_18.png
-├── 08_databricks_model_views.png
-└── 09_mart_preview.png
-```
-
-The replay evidence covers external access configuration, source metadata and counts, dbt configuration, successful model and test execution, and the resulting analytics views.
-
-Public-facing screenshots should be reviewed for secrets, personal information, external IDs, and infrastructure identifiers before publication. Optional validation warnings should remain accurately represented.
-
-The `images/` directory also retains implementation and validation artifacts from supporting or exploratory work, including Airflow cluster activity and Cassandra validation.
+Older supporting images, including Cassandra or other exploratory validation, are not a claim that every explored integration belongs to the primary runtime architecture.
 
 ## License
 
